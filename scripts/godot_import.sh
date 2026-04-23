@@ -18,8 +18,8 @@ LOG=/tmp/godot_import.log
 "$GODOT" --headless --editor --path . --quit-after 60 > "$LOG" 2>&1
 status=$?
 
-if [ "$status" -eq 0 ] && grep -qiE "Could not find type|Identifier .* not declared" "$LOG"; then
-	echo "class_name registration didn't settle on the first pass, retrying once…"
+if [ "$status" -eq 0 ] && grep -qiE "Could not find type|Identifier .* not declared|referenced non-existent resource" "$LOG"; then
+	echo "Import didn't fully settle on the first pass (ordering race), retrying once…"
 	"$GODOT" --headless --editor --path . --quit-after 60 > "$LOG" 2>&1
 	status=$?
 fi
