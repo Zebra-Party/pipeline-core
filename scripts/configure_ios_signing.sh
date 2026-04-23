@@ -34,7 +34,12 @@ echo "$APPLE_IOS_DISTRIBUTION_PROVISION" | base64 --decode > "$PROFILE_PATH"
 security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
 security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+# Add to search list first, then set as default. Setting as default is
+# required so that xcodebuild's internal codesign subprocess can reach
+# the private key — omitting it causes errSecInternalComponent.
+EXISTING=$(security list-keychains -d user | tr -d '"' | tr '\n' ' ')
+security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING
+security default-keychain -s "$KEYCHAIN_PATH"
 
 security import "$P12_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" \
 	-T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcodebuild
