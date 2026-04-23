@@ -30,7 +30,7 @@ No secrets required. The APK is unsigned — Play Store release signing is not i
 | Apply version | `set_version.sh` | Writes `version/name` (string) and `version/code` (integer) into `export_presets.cfg`. |
 | Reimport | `godot_import.sh` | Primes the asset import cache. |
 | Pre-export script | _(your script)_ | Only runs if `pre_export_script` is set. |
-| Disable gradle_build | _(inline)_ | Sets `gradle_build/use_gradle_build=false` in `export_presets.cfg`. The Gradle build path requires an Android Studio project setup that isn't available in CI; the standard Godot template export works fine for smoke testing. |
+| Disable gradle_build | _(inline)_ | Sets `gradle_build/use_gradle_build=false` and `gradle_build/export_format=0` (APK) in `export_presets.cfg`. The Gradle build path requires an Android Studio project setup that isn't available in CI; the standard Godot template export works fine for smoke testing. If the project is configured for AAB export (`export_format=1`), Godot refuses to export with Gradle build disabled — resetting to APK avoids that error. |
 | Godot export (APK) | _(inline)_ | Calls `godot --headless --export-debug "<android_preset>" build/android/<app_name>.apk`. Uses `--export-debug` (not `--export-release`) since the APK is unsigned. |
 | Upload artifact | `actions/upload-artifact@v4` | Attaches the APK to the workflow run. Retained for 14 days. Warns (does not fail) if no APK was produced. |
 | Restore presets | _(inline)_ | Always runs. Reverts `export_presets.cfg` to its committed state. |
