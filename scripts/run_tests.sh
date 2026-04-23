@@ -13,7 +13,7 @@ TEST_PATTERN="${TEST_PATTERN:-test/_test_*.gd}"
 
 failures=0
 found=0
-shopt -s nullglob globstar
+shopt -s nullglob
 for script in $TEST_PATTERN; do
 	found=$((found + 1))
 	echo "::group::$script"
