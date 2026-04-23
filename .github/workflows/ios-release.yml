@@ -1,0 +1,122 @@
+name: iOS Release
+
+# Reusable workflow: iOS build + optional TestFlight upload.
+# Gracefully skips signing/upload if secrets are absent (useful on forks
+# or before Apple credentials are wired up).
+#
+# Usage:
+#   jobs:
+#     ios:
+#       needs: test
+#       uses: Zebra-Party/pipeline-core/.github/workflows/ios-release.yml@main
+#       with:
+#         godot_version: "4.6.2-stable"
+#         app_name: "GameTwo"
+#       secrets: inherit
+
+on:
+  workflow_call:
+    inputs:
+      godot_version:
+        type: string
+        default: "4.6.2-stable"
+      runner:
+        description: 'JSON array of runner labels'
+        type: string
+        default: '["self-hosted", "macOS", "X64"]'
+      app_name:
+        description: "Base filename for the IPA (no extension)"
+        type: string
+        default: "export"
+      upload_to_testflight:
+        description: "Upload to TestFlight when on main branch"
+        type: boolean
+        default: true
+      pre_export_script:
+        description: "Optional project script to run before Godot export"
+        type: string
+        default: ""
+      clean_checkout:
+        type: boolean
+        default: false
+
+jobs:
+  ios:
+    name: iOS build & upload
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    timeout-minutes: 45
+    env:
+      GODOT_VERSION: ${{ inputs.godot_version }}
+      APP_NAME: ${{ inputs.app_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          clean: ${{ inputs.clean_checkout }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: Zebra-Party/pipeline-core
+          ref: main
+          path: .pipeline-core
+
+      - name: Install Godot & export templates
+        run: bash .pipeline-core/scripts/install_godot.sh "$GODOT_VERSION"
+
+      - name: Compute version
+        id: version
+        run: bash .pipeline-core/scripts/compute_version.sh
+
+      - name: Apply version to project + presets
+        run: bash .pipeline-core/scripts/set_version.sh "${{ steps.version.outputs.version }}" "${{ steps.version.outputs.build }}"
+
+      - name: Reimport
+        run: bash .pipeline-core/scripts/godot_import.sh
+
+      - name: Configure iOS signing
+        id: signing
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_IOS_DISTRIBUTION_PROVISION: ${{ secrets.APPLE_IOS_DISTRIBUTION_PROVISION }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE_P12_BASE64" ] || [ -z "$APPLE_IOS_DISTRIBUTION_PROVISION" ]; then
+            echo "::warning::iOS signing secrets not set — skipping build/upload."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          bash .pipeline-core/scripts/configure_ios_signing.sh
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Pre-export script
+        if: steps.signing.outputs.skip != 'true' && inputs.pre_export_script != ''
+        run: bash ${{ inputs.pre_export_script }}
+
+      - name: Build IPA
+        if: steps.signing.outputs.skip != 'true'
+        run: bash .pipeline-core/scripts/build_ios.sh
+
+      - name: Upload to TestFlight
+        if: >-
+          steps.signing.outputs.skip != 'true' &&
+          inputs.upload_to_testflight &&
+          github.ref == 'refs/heads/main' &&
+          github.event_name != 'pull_request'
+        env:
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_BASE64 }}
+        run: |
+          if [ -z "$APP_STORE_CONNECT_ISSUER_ID" ] || [ -z "$APP_STORE_CONNECT_KEY_ID" ] || [ -z "$APP_STORE_CONNECT_PRIVATE_KEY_BASE64" ]; then
+            echo "::warning::App Store Connect API key not set — skipping upload."
+            exit 0
+          fi
+          bash .pipeline-core/scripts/upload_ios.sh
+
+      - name: Clean up keychain
+        if: always() && env.KEYCHAIN_PATH != ''
+        run: security delete-keychain "$KEYCHAIN_PATH" || true
+
+      - name: Restore export_presets.cfg
+        if: always()
+        run: git checkout -- export_presets.cfg || true

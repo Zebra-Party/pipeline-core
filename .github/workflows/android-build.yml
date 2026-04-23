@@ -1,0 +1,114 @@
+name: Android Build
+
+# Reusable workflow: Android APK/AAB build. Produces an unsigned debug APK
+# as an artifact. Release signing + Play Store upload are deferred.
+#
+# Usage:
+#   jobs:
+#     android:
+#       needs: test
+#       uses: Zebra-Party/pipeline-core/.github/workflows/android-build.yml@main
+#       with:
+#         godot_version: "4.6.2-stable"
+#         app_name: "GameTwo"
+#       secrets: inherit
+
+on:
+  workflow_call:
+    inputs:
+      godot_version:
+        type: string
+        default: "4.6.2-stable"
+      runner:
+        description: 'JSON array of runner labels'
+        type: string
+        default: '"ubuntu-latest"'
+      app_name:
+        description: "Base filename for the APK (no extension)"
+        type: string
+        default: "export"
+      android_preset:
+        description: "Godot export preset name for Android"
+        type: string
+        default: "Android"
+      pre_export_script:
+        description: "Optional project script to run before Godot export"
+        type: string
+        default: ""
+
+jobs:
+  android:
+    name: Android build
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    timeout-minutes: 45
+    env:
+      GODOT_VERSION: ${{ inputs.godot_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/checkout@v4
+        with:
+          repository: Zebra-Party/pipeline-core
+          ref: main
+          path: .pipeline-core
+
+      - uses: actions/setup-java@v5
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Godot
+        run: bash .pipeline-core/scripts/install_godot.sh "$GODOT_VERSION"
+
+      - name: Configure Godot's Android SDK paths
+        run: |
+          CFG="$HOME/.config/godot/editor_settings-4.tres"
+          mkdir -p "$(dirname "$CFG")"
+          cat > "$CFG" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+          [resource]
+          export/android/android_sdk_path = "$ANDROID_SDK_ROOT"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          EOF
+
+      - name: Compute version
+        id: version
+        run: bash .pipeline-core/scripts/compute_version.sh
+
+      - name: Apply version to project + presets
+        run: bash .pipeline-core/scripts/set_version.sh "${{ steps.version.outputs.version }}" "${{ steps.version.outputs.build }}"
+
+      - name: Reimport
+        run: bash .pipeline-core/scripts/godot_import.sh
+
+      - name: Pre-export script
+        if: inputs.pre_export_script != ''
+        run: bash ${{ inputs.pre_export_script }}
+
+      - name: Disable gradle_build for CI smoke test
+        run: |
+          sed -i 's|^gradle_build/use_gradle_build=true|gradle_build/use_gradle_build=false|' export_presets.cfg || true
+
+      - name: Godot export (APK)
+        run: |
+          mkdir -p build/android
+          "$GODOT" --headless --path . \
+            --export-debug "${{ inputs.android_preset }}" "build/android/${{ inputs.app_name }}.apk"
+          ls -la build/android/
+
+      - name: Upload APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: build/android/*.apk
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Restore export_presets.cfg
+        if: always()
+        run: git checkout -- export_presets.cfg || true

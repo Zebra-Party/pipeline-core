@@ -1,0 +1,132 @@
+name: GDScript CI
+
+# Reusable workflow: GDScript lint, scene boot, headless tests, and
+# screenshots (PRs only). Call from a game repo's ci.yml / release.yml:
+#
+#   jobs:
+#     gdscript:
+#       uses: Zebra-Party/pipeline-core/.github/workflows/gdscript-ci.yml@main
+#       permissions:
+#         contents: write
+#         pull-requests: write
+#       with:
+#         godot_version: "4.6.2-stable"
+#         lint_dirs: "src"
+#       secrets: inherit
+
+on:
+  workflow_call:
+    inputs:
+      godot_version:
+        type: string
+        default: "4.6.2-stable"
+      runner:
+        description: 'JSON array of runner labels, e.g. ["self-hosted","Linux","X64"]'
+        type: string
+        default: '["self-hosted", "Linux", "X64"]'
+      lint_dirs:
+        description: "Space-separated directories to pass to gdformat/gdlint"
+        type: string
+        default: "scripts tools test"
+      scene_dir:
+        description: "Root directory searched recursively for .tscn files"
+        type: string
+        default: "scenes"
+      test_pattern:
+        description: "Glob pattern for headless test scripts"
+        type: string
+        default: "test/_test_*.gd"
+      clean_checkout:
+        description: "Whether to clean the workspace before checkout (set false to preserve .godot/ cache)"
+        type: boolean
+        default: false
+      pre_test_script:
+        description: "Optional path to a project script to run before tests (e.g. tools/compile_scenes.sh)"
+        type: string
+        default: ""
+
+jobs:
+  test:
+    name: GDScript tests & lint
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    timeout-minutes: 20
+    env:
+      GODOT_VERSION: ${{ inputs.godot_version }}
+      LINT_DIRS: ${{ inputs.lint_dirs }}
+      SCENE_DIR: ${{ inputs.scene_dir }}
+      TEST_PATTERN: ${{ inputs.test_pattern }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: ${{ inputs.clean_checkout }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: Zebra-Party/pipeline-core
+          ref: main
+          path: .pipeline-core
+
+      - name: Install Godot & export templates
+        run: bash .pipeline-core/scripts/install_godot.sh "$GODOT_VERSION"
+
+      - name: Pre-test script
+        if: inputs.pre_test_script != ''
+        run: bash ${{ inputs.pre_test_script }}
+
+      - name: Lint (gdformat + gdlint)
+        run: bash .pipeline-core/scripts/lint.sh
+
+      - name: Reimport project
+        run: bash .pipeline-core/scripts/godot_import.sh
+
+      - name: Boot every scene
+        run: bash .pipeline-core/scripts/boot_scenes.sh
+
+      - name: Run headless tests
+        run: bash .pipeline-core/scripts/run_tests.sh
+
+  screenshots:
+    name: Screenshots
+    needs: test
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    timeout-minutes: 15
+    # Screenshots only make sense on PRs from the same repo (fork PRs get a
+    # read-only token and can't push to the orphan branch).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GODOT_VERSION: ${{ inputs.godot_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: ${{ inputs.clean_checkout }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: Zebra-Party/pipeline-core
+          ref: main
+          path: .pipeline-core
+
+      - name: Install Godot & export templates
+        run: bash .pipeline-core/scripts/install_godot.sh "$GODOT_VERSION"
+
+      - name: Capture screenshots
+        run: bash .pipeline-core/scripts/screenshot_scenes.sh
+
+      - name: Upload screenshots artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: build/screenshots
+          if-no-files-found: error
+
+      - name: Publish to PR comment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+          SCREENSHOT_DIR: build/screenshots
+        run: bash .pipeline-core/scripts/publish_screenshots.sh
