@@ -38,6 +38,15 @@ fi
 echo "✅ ios.zip present ($(stat -f%z "$TEMPLATES_DIR/ios.zip" 2>/dev/null || echo '?') bytes)"
 echo
 
+# Re-unlock and re-assert default keychain immediately before Godot runs.
+# xcodebuild spawns codesign as a subprocess; if the keychain has been
+# locked or its "default" status reset between workflow steps, codesign
+# gets errSecInternalComponent. Repeating these calls is safe and cheap.
+if [ -n "${KEYCHAIN_PATH:-}" ] && [ -n "${KEYCHAIN_PASSWORD:-}" ]; then
+    security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+    security default-keychain -s "$KEYCHAIN_PATH"
+fi
+
 echo "::group::Godot --export-release"
 "$GODOT" --headless --path . --export-release "iOS" "$IPA_PATH"
 echo "::endgroup::"
