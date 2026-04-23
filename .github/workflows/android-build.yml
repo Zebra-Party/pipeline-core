@@ -93,6 +93,8 @@ jobs:
       - name: Disable gradle_build for CI smoke test
         run: |
           sed -i 's|^gradle_build/use_gradle_build=true|gradle_build/use_gradle_build=false|' export_presets.cfg || true
+          # AAB export (format=1) requires gradle build; switch to APK (format=0) when disabling it.
+          sed -i 's|^gradle_build/export_format=1|gradle_build/export_format=0|' export_presets.cfg || true
 
       - name: Godot export (APK)
         run: |
