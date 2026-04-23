@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Sets up Apple Distribution signing for macOS builds.
+# Imports the distribution cert + optionally the Mac Installer cert,
+# installs the provisioning profile, and patches export_presets.cfg.
+#
+# Required env vars:
+#   APPLE_CERTIFICATE_P12_BASE64         — base64 distribution .p12
+#   APPLE_CERTIFICATE_PASSWORD           — .p12 password
+#   APPLE_MACOS_DISTRIBUTION_PROVISION   — base64 .provisionprofile
+#
+# Optional env vars:
+#   APPLE_MAC_INSTALLER_P12_BASE64       — base64 installer .p12 (for signed .pkg)
+#
+# Outputs (set on $GITHUB_ENV when present):
+#   MACOS_TEAM_ID
+#   MACOS_PROVISIONING_PROFILE_UUID
+#   KEYCHAIN_PATH
+#   KEYCHAIN_PASSWORD
+
+set -euo pipefail
+
+: "${APPLE_CERTIFICATE_P12_BASE64:?missing}"
+: "${APPLE_CERTIFICATE_PASSWORD:?missing}"
+: "${APPLE_MACOS_DISTRIBUTION_PROVISION:?missing}"
+
+WORK_DIR="${RUNNER_TEMP:-$(mktemp -d)}"
+KEYCHAIN_PATH="$WORK_DIR/build.keychain-db"
+KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
+CERT_PATH="$WORK_DIR/certificate.p12"
+PROFILE_PATH="$WORK_DIR/profile.provisionprofile"
+
+echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERT_PATH"
+echo "$APPLE_MACOS_DISTRIBUTION_PROVISION" | base64 --decode > "$PROFILE_PATH"
+
+security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -f pkcs12 -k "$KEYCHAIN_PATH"
+security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
+	-s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+EXISTING=$(security list-keychains -d user | tr -d '"' | tr '\n' ' ')
+security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING
+security default-keychain -s "$KEYCHAIN_PATH"
+
+security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+# Optional Mac Installer Distribution cert for signed .pkg.
+if [ -n "${APPLE_MAC_INSTALLER_P12_BASE64:-}" ]; then
+	INSTALLER_CERT_PATH="$WORK_DIR/installer_certificate.p12"
+	echo "$APPLE_MAC_INSTALLER_P12_BASE64" | base64 --decode > "$INSTALLER_CERT_PATH"
+	security import "$INSTALLER_CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -f pkcs12 -k "$KEYCHAIN_PATH"
+	security set-key-partition-list -S "apple-tool:,apple:,codesign:,productbuild:" \
+		-s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+	echo "Mac Installer cert imported"
+else
+	echo "No APPLE_MAC_INSTALLER_P12_BASE64 — .pkg will be unsigned"
+fi
+
+# Extract UUID + Team ID from the profile.
+PLIST="$(security cms -D -i "$PROFILE_PATH")"
+PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< "$PLIST")
+TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print TeamIdentifier:0" /dev/stdin <<< "$PLIST")
+
+mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/${PROFILE_UUID}.provisionprofile"
+
+echo "macOS signing config:"
+echo "  Team ID              : $TEAM_ID"
+echo "  Profile UUID         : $PROFILE_UUID"
+
+# Patch export_presets.cfg with team ID + code sign identity.
+awk \
+	-v team="$TEAM_ID" \
+	'
+		/^codesign\/apple_team_id=/  { print "codesign/apple_team_id=\"" team "\""; next }
+		/^codesign\/identity=/       { print "codesign/identity=\"Apple Distribution\""; next }
+		{ print }
+	' export_presets.cfg > export_presets.cfg.tmp
+mv export_presets.cfg.tmp export_presets.cfg
+
+if [ -n "${GITHUB_ENV:-}" ]; then
+	{
+		echo "MACOS_TEAM_ID=$TEAM_ID"
+		echo "MACOS_PROVISIONING_PROFILE_UUID=$PROFILE_UUID"
+		echo "KEYCHAIN_PATH=$KEYCHAIN_PATH"
+		echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD"
+	} >> "$GITHUB_ENV"
+fi
