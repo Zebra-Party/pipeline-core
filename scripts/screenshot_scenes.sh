@@ -58,7 +58,7 @@ mkdir -p "$OUT_DIR"
 rm -rf "${OUT_DIR:?}"/*
 
 failures=0
-shopt -s nullglob
+shopt -s nullglob globstar
 for scene in $SCENE_GLOB; do
 	scene_name="$(basename "$scene" .tscn)"
 	for entry in "${DEVICES[@]}"; do

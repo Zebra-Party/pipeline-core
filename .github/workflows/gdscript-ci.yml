@@ -44,6 +44,10 @@ on:
         description: "Optional path to a project script to run before tests (e.g. tools/compile_scenes.sh)"
         type: string
         default: ""
+      screenshot_scene_glob:
+        description: "Space-separated glob(s) passed to screenshot_scenes.sh as SCENE_GLOB — supports ** via globstar"
+        type: string
+        default: "scenes/*.tscn"
 
 jobs:
   test:
@@ -98,6 +102,7 @@ jobs:
       pull-requests: write
     env:
       GODOT_VERSION: ${{ inputs.godot_version }}
+      SCENE_GLOB: ${{ inputs.screenshot_scene_glob }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -111,6 +116,10 @@ jobs:
 
       - name: Install Godot & export templates
         run: bash .pipeline-core/scripts/install_godot.sh "$GODOT_VERSION"
+
+      - name: Pre-screenshot script
+        if: inputs.pre_test_script != ''
+        run: bash ${{ inputs.pre_test_script }}
 
       - name: Capture screenshots
         run: bash .pipeline-core/scripts/screenshot_scenes.sh
