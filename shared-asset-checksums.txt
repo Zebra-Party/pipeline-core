@@ -1,0 +1,16 @@
+# Reference checksums for shared font assets across consumer repos.
+# All three games (GameOne, GameTwo, GameThree) must keep
+# identical fonts/ directories. CI verifies this via verify_shared_assets.sh.
+#
+# To update after a font change: run `md5sum fonts/* | sort -k2` from one
+# game repo, paste the output here, then propagate the new font files to the
+# other two games.
+ccf2f844ded8bfd50efbed532a60d068  fonts/Caveat.ttf
+570bb73e5d413d8d1fdb252d615d05c4  fonts/Caveat.ttf.import
+cdf3c15b18a21e1a59dfdf866c9107ed  fonts/LibreBaskerville-Italic.ttf
+e33bc7cffa10e74a9b045734da178b43  fonts/LibreBaskerville-Italic.ttf.import
+809486dace947ec7338ab23e748cd00b  fonts/LibreBaskerville.ttf
+24f5051afc6aa9810e01062ed01877ca  fonts/LibreBaskerville.ttf.import
+a3ba2845be95b14848a25a7ffe31bbf5  fonts/LICENSE.md
+038aec929d8d05c5de0bb20e040f9973  fonts/PlayfairDisplay-Black.ttf
+5a5e324d9a9aad26d39ad28d379235cf  fonts/PlayfairDisplay-Black.ttf.import
