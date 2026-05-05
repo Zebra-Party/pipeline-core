@@ -50,7 +50,8 @@ security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
 security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
 security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -k "$KEYCHAIN_PATH" -A
+security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -k "$KEYCHAIN_PATH" \
+    -A -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcodebuild
 security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
     -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
@@ -62,7 +63,8 @@ security default-keychain -s "$KEYCHAIN_PATH"
 if [ "$PLATFORM" = "macos" ] && [ -n "${APPLE_MAC_INSTALLER_P12_BASE64:-}" ]; then
     INSTALLER_CERT_PATH="$WORK_DIR/installer_certificate.p12"
     echo "$APPLE_MAC_INSTALLER_P12_BASE64" | base64 --decode > "$INSTALLER_CERT_PATH"
-    security import "$INSTALLER_CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -f pkcs12 -k "$KEYCHAIN_PATH"
+    security import "$INSTALLER_CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -k "$KEYCHAIN_PATH" \
+        -T /usr/bin/productbuild
     security set-key-partition-list -S "apple-tool:,apple:,codesign:,productbuild:" \
         -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
     echo "Mac Installer cert imported"
