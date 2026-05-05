@@ -50,8 +50,7 @@ security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
 security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
 security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -k "$KEYCHAIN_PATH" \
-    -A -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcodebuild
+security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -k "$KEYCHAIN_PATH" -A
 security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
     -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
