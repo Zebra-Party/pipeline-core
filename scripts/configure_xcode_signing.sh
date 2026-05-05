@@ -50,8 +50,7 @@ security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
 security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
 security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -k "$KEYCHAIN_PATH" \
-    -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcodebuild
+security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -k "$KEYCHAIN_PATH" -A
 security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
     -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
@@ -79,11 +78,15 @@ PROFILE_UUID="$(echo "$PLIST" | plutil -extract UUID raw -)"
 TEAM_ID="$(echo "$PLIST"  | plutil -extract TeamIdentifier.0 raw -)"
 PROFILE_NAME="$(echo "$PLIST" | plutil -extract Name raw -)"
 
-# Extract bundle ID from Entitlements.application-identifier (strip team prefix).
-# Falls back to "*" if the key is absent (wildcard profile).
-PROFILE_APPID="$(echo "$PLIST" | plutil -extract Entitlements.application-identifier raw - 2>/dev/null || true)"
+# Extract bundle ID and strip the team prefix.
+# iOS/tvOS profiles use 'application-identifier'; macOS profiles use
+# 'com.apple.application-identifier' (dotted key — must use PlistBuddy
+# because plutil -extract treats dots as path separators).
+PLIST_FILE="$WORK_DIR/profile-${PLATFORM}.plist"
+echo "$PLIST" > "$PLIST_FILE"
+PROFILE_APPID="$(/usr/libexec/PlistBuddy -c 'Print Entitlements:application-identifier' "$PLIST_FILE" 2>/dev/null || true)"
 if [ -z "$PROFILE_APPID" ]; then
-    PROFILE_APPID="$(echo "$PLIST" | plutil -extract Entitlements.com.apple.application-identifier raw - 2>/dev/null || true)"
+    PROFILE_APPID="$(/usr/libexec/PlistBuddy -c 'Print Entitlements:com.apple.application-identifier' "$PLIST_FILE" 2>/dev/null || true)"
 fi
 if [ -n "$PROFILE_APPID" ]; then
     BUNDLE_ID="${PROFILE_APPID#${TEAM_ID}.}"
