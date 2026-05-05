@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Verifies that this game repo's fonts/ directory matches the reference
 # checksums in pipeline-core. Skipped automatically for projects that don't
-# have a fonts/ directory (e.g. OtherGame uses Assets/Fonts/).
+# have a top-level fonts/ directory (some repos use a different layout).
 #
 # To update the reference after a font change, see the header comment in
 # pipeline-core/shared-asset-checksums.txt.
@@ -22,7 +22,7 @@ if md5sum --check "$CHECKSUMS" --quiet; then
 else
   echo ""
   echo "ERROR: One or more font files have drifted from the shared reference."
-  echo "Either propagate the updated fonts to all three consumer repos and update"
+  echo "Either propagate the updated fonts to all consumer repos and update"
   echo "pipeline-core/shared-asset-checksums.txt, or revert the local change."
   exit 1
 fi
