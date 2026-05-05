@@ -76,6 +76,9 @@ SIGNING_ARGS=(
     CODE_SIGN_STYLE=Manual
     CODE_SIGN_IDENTITY="Apple Distribution"
     DEVELOPMENT_TEAM="$TEAM_ID"
+    # Explicit keychain path prevents errSecInternalComponent when codesign
+    # runs as an xcodebuild subprocess and the default keychain has shifted.
+    OTHER_CODE_SIGN_FLAGS="--keychain ${KEYCHAIN_PATH}"
 )
 [ -n "$PROFILE_UUID" ] && SIGNING_ARGS+=(PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID")
 
