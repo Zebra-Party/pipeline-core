@@ -64,9 +64,16 @@ else
     exit 1
 fi
 
-# Re-unlock keychain immediately before xcodebuild — it may lock between steps.
+# Re-unlock and re-establish keychain access before xcodebuild.
+# The partition list and search list can be reset between steps on some runners.
 security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
+    -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+EXISTING=$(security list-keychains -d user | tr -d '"' | tr '\n' ' ')
+# shellcheck disable=SC2086  # word-split is intentional here
+security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING
 security default-keychain -s "$KEYCHAIN_PATH"
+security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
 VERSION_ARGS=()
 [ -n "${VERSION:-}" ] && VERSION_ARGS+=(MARKETING_VERSION="$VERSION")
