@@ -105,6 +105,14 @@ echo "  Bundle  : $BUNDLE_ID"
 EXPORT_OPTIONS_PATH="${EXPORT_OPTIONS_PATH:-build/ExportOptions-${PLATFORM}.plist}"
 mkdir -p "$(dirname "$EXPORT_OPTIONS_PATH")"
 
+ICLOUD_ENV_KEY=""
+if [ "$PLATFORM" = "macos" ]; then
+    # CloudKit requires the container environment to be declared explicitly
+    # for app-store-connect exports; omitting it causes an export failure.
+    ICLOUD_ENV_KEY="    <key>iCloudContainerEnvironment</key>
+    <string>Production</string>"
+fi
+
 cat > "$EXPORT_OPTIONS_PATH" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -118,6 +126,7 @@ cat > "$EXPORT_OPTIONS_PATH" <<PLIST
     <string>manual</string>
     <key>uploadSymbols</key>
     <true/>
+${ICLOUD_ENV_KEY}
     <key>provisioningProfiles</key>
     <dict>
         <key>${BUNDLE_ID}</key>
