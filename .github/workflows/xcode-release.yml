@@ -1,0 +1,286 @@
+name: Xcode Release
+
+# Reusable workflow: iOS, macOS, and tvOS build + optional TestFlight upload
+# for a native Swift/Xcode project. Each platform is a parallel job; a job
+# skips gracefully if its provisioning profile secret is absent.
+#
+# Provisioning profiles are app-specific, so callers pass them under the
+# generic names below and map their own org secrets:
+#
+#   jobs:
+#     release:
+#       uses: Zebra-Party/pipeline-core/.github/workflows/xcode-release.yml@main
+#       with:
+#         app_name: "MyApp"
+#       secrets:
+#         APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+#         APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+#         APPLE_MAC_INSTALLER_P12_BASE64: ${{ secrets.APPLE_MAC_INSTALLER_P12_BASE64 }}
+#         APPLE_IOS_PROVISION: ${{ secrets.APPLE_MYAPP_IOS_DISTRIBUTION_PROVISION }}
+#         APPLE_MACOS_PROVISION: ${{ secrets.APPLE_MYAPP_MACOS_DISTRIBUTION_PROVISION }}
+#         APPLE_TVOS_PROVISION: ${{ secrets.APPLE_MYAPP_TVOS_DISTRIBUTION_PROVISION }}
+#         APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+#         APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+#         APP_STORE_CONNECT_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_BASE64 }}
+
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        description: "Xcode scheme name and output file basename"
+        type: string
+        required: true
+      runner:
+        description: "JSON array of runner labels"
+        type: string
+        default: '["self-hosted", "macOS", "X64"]'
+      upload_to_testflight:
+        description: "Upload to TestFlight on merges to main"
+        type: boolean
+        default: true
+    secrets:
+      APPLE_CERTIFICATE_P12_BASE64:
+        required: true
+      APPLE_CERTIFICATE_PASSWORD:
+        required: true
+      APPLE_MAC_INSTALLER_P12_BASE64:
+        required: false
+      APPLE_IOS_PROVISION:
+        required: false
+      APPLE_MACOS_PROVISION:
+        required: false
+      APPLE_TVOS_PROVISION:
+        required: false
+      APP_STORE_CONNECT_ISSUER_ID:
+        required: false
+      APP_STORE_CONNECT_KEY_ID:
+        required: false
+      APP_STORE_CONNECT_PRIVATE_KEY_BASE64:
+        required: false
+
+jobs:
+  ios:
+    name: iOS build & upload
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    timeout-minutes: 45
+    env:
+      APP_NAME: ${{ inputs.app_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/checkout@v4
+        with:
+          repository: Zebra-Party/pipeline-core
+          ref: main
+          path: .pipeline-core
+
+      - name: Check signing secrets
+        id: signing
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_IOS_PROVISION: ${{ secrets.APPLE_IOS_PROVISION }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE_P12_BASE64" ] || [ -z "$APPLE_IOS_PROVISION" ]; then
+            echo "::warning::iOS signing secrets not set — skipping build and upload."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute version
+        if: steps.signing.outputs.skip != 'true'
+        id: version
+        run: bash .pipeline-core/scripts/compute_version.sh
+
+      - name: Configure iOS signing
+        if: steps.signing.outputs.skip != 'true'
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_DISTRIBUTION_PROVISION: ${{ secrets.APPLE_IOS_PROVISION }}
+          PLATFORM: ios
+        run: bash .pipeline-core/scripts/configure_xcode_signing.sh
+
+      - name: Build iOS IPA
+        if: steps.signing.outputs.skip != 'true'
+        env:
+          PLATFORM: ios
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD: ${{ steps.version.outputs.build }}
+        run: bash .pipeline-core/scripts/build_xcode.sh
+
+      - name: Upload to TestFlight
+        if: >-
+          steps.signing.outputs.skip != 'true' &&
+          inputs.upload_to_testflight &&
+          github.ref == 'refs/heads/main' &&
+          github.event_name != 'pull_request'
+        env:
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_BASE64 }}
+        run: |
+          if [ -z "$APP_STORE_CONNECT_ISSUER_ID" ] || [ -z "$APP_STORE_CONNECT_KEY_ID" ] || [ -z "$APP_STORE_CONNECT_PRIVATE_KEY_BASE64" ]; then
+            echo "::warning::App Store Connect API key not set — skipping upload."
+            exit 0
+          fi
+          bash .pipeline-core/scripts/upload_ios.sh
+
+      - name: Clean up keychain
+        if: always() && env.KEYCHAIN_PATH != ''
+        run: |
+          security default-keychain -s ~/Library/Keychains/login.keychain-db 2>/dev/null || true
+          security delete-keychain "$KEYCHAIN_PATH" || true
+
+  macos:
+    name: macOS build & upload
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    timeout-minutes: 45
+    env:
+      APP_NAME: ${{ inputs.app_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/checkout@v4
+        with:
+          repository: Zebra-Party/pipeline-core
+          ref: main
+          path: .pipeline-core
+
+      - name: Check signing secrets
+        id: signing
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_MACOS_PROVISION: ${{ secrets.APPLE_MACOS_PROVISION }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE_P12_BASE64" ] || [ -z "$APPLE_MACOS_PROVISION" ]; then
+            echo "::warning::macOS signing secrets not set — skipping build and upload."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute version
+        if: steps.signing.outputs.skip != 'true'
+        id: version
+        run: bash .pipeline-core/scripts/compute_version.sh
+
+      - name: Configure macOS signing
+        if: steps.signing.outputs.skip != 'true'
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_DISTRIBUTION_PROVISION: ${{ secrets.APPLE_MACOS_PROVISION }}
+          APPLE_MAC_INSTALLER_P12_BASE64: ${{ secrets.APPLE_MAC_INSTALLER_P12_BASE64 }}
+          PLATFORM: macos
+        run: bash .pipeline-core/scripts/configure_xcode_signing.sh
+
+      - name: Build macOS pkg
+        if: steps.signing.outputs.skip != 'true'
+        env:
+          PLATFORM: macos
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD: ${{ steps.version.outputs.build }}
+        run: bash .pipeline-core/scripts/build_xcode.sh
+
+      - name: Upload to TestFlight
+        if: >-
+          steps.signing.outputs.skip != 'true' &&
+          inputs.upload_to_testflight &&
+          github.ref == 'refs/heads/main' &&
+          github.event_name != 'pull_request'
+        env:
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_BASE64 }}
+        run: |
+          if [ -z "$APP_STORE_CONNECT_ISSUER_ID" ] || [ -z "$APP_STORE_CONNECT_KEY_ID" ] || [ -z "$APP_STORE_CONNECT_PRIVATE_KEY_BASE64" ]; then
+            echo "::warning::App Store Connect API key not set — skipping upload."
+            exit 0
+          fi
+          bash .pipeline-core/scripts/upload_macos.sh
+
+      - name: Clean up keychain
+        if: always() && env.KEYCHAIN_PATH != ''
+        run: |
+          security default-keychain -s ~/Library/Keychains/login.keychain-db 2>/dev/null || true
+          security delete-keychain "$KEYCHAIN_PATH" || true
+
+  tvos:
+    name: tvOS build & upload
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    timeout-minutes: 45
+    env:
+      APP_NAME: ${{ inputs.app_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/checkout@v4
+        with:
+          repository: Zebra-Party/pipeline-core
+          ref: main
+          path: .pipeline-core
+
+      - name: Check signing secrets
+        id: signing
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_TVOS_PROVISION: ${{ secrets.APPLE_TVOS_PROVISION }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE_P12_BASE64" ] || [ -z "$APPLE_TVOS_PROVISION" ]; then
+            echo "::warning::tvOS signing secrets not set — skipping build and upload."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute version
+        if: steps.signing.outputs.skip != 'true'
+        id: version
+        run: bash .pipeline-core/scripts/compute_version.sh
+
+      - name: Configure tvOS signing
+        if: steps.signing.outputs.skip != 'true'
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_DISTRIBUTION_PROVISION: ${{ secrets.APPLE_TVOS_PROVISION }}
+          PLATFORM: appletvos
+        run: bash .pipeline-core/scripts/configure_xcode_signing.sh
+
+      - name: Build tvOS IPA
+        if: steps.signing.outputs.skip != 'true'
+        env:
+          PLATFORM: appletvos
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD: ${{ steps.version.outputs.build }}
+        run: bash .pipeline-core/scripts/build_xcode.sh
+
+      - name: Upload to TestFlight
+        if: >-
+          steps.signing.outputs.skip != 'true' &&
+          inputs.upload_to_testflight &&
+          github.ref == 'refs/heads/main' &&
+          github.event_name != 'pull_request'
+        env:
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_BASE64 }}
+        run: |
+          if [ -z "$APP_STORE_CONNECT_ISSUER_ID" ] || [ -z "$APP_STORE_CONNECT_KEY_ID" ] || [ -z "$APP_STORE_CONNECT_PRIVATE_KEY_BASE64" ]; then
+            echo "::warning::App Store Connect API key not set — skipping upload."
+            exit 0
+          fi
+          bash .pipeline-core/scripts/upload_tvos.sh
+
+      - name: Clean up keychain
+        if: always() && env.KEYCHAIN_PATH != ''
+        run: |
+          security default-keychain -s ~/Library/Keychains/login.keychain-db 2>/dev/null || true
+          security delete-keychain "$KEYCHAIN_PATH" || true
