@@ -33,7 +33,7 @@ on:
       runner:
         description: "JSON array of runner labels"
         type: string
-        default: '["self-hosted", "macOS", "X64"]'
+        default: '["self-hosted", "macOS"]'
       upload_to_testflight:
         description: "Upload to TestFlight on merges to main"
         type: boolean
