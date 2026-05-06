@@ -33,6 +33,7 @@ set -euo pipefail
 
 WORK_DIR="${RUNNER_TEMP:-$(mktemp -d)}"
 KEYCHAIN_PATH="$WORK_DIR/build-${PLATFORM}.keychain-db"
+echo "Runner: $(hostname), user: $(whoami), WORK_DIR=$WORK_DIR"
 KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
 CERT_PATH="$WORK_DIR/certificate-${PLATFORM}.p12"
 
@@ -45,6 +46,14 @@ PROFILE_PATH="$WORK_DIR/profile-${PLATFORM}.${PROFILE_EXT}"
 
 echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERT_PATH"
 echo "$APPLE_DISTRIBUTION_PROVISION"  | base64 --decode > "$PROFILE_PATH"
+
+# Ensure the user's keychain domain is initialised (required on accounts that
+# have never had a GUI login; without this, security import fails with
+# "Write permissions error / problem decoding").
+if ! security list-keychains -d user &>/dev/null; then
+    echo "Initialising keychain domain for $(whoami)"
+    security create-keychain -p "" "$HOME/Library/Keychains/login.keychain-db" 2>/dev/null || true
+fi
 
 security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
 security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
