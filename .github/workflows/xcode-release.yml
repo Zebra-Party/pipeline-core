@@ -31,9 +31,9 @@ on:
         type: string
         required: true
       runner:
-        description: "Runner label or JSON array of runner labels (default: GitHub-hosted macos-15)"
+        description: "Runner label or JSON array of runner labels (default: GitHub-hosted macos-26)"
         type: string
-        default: '"macos-15"'
+        default: '"macos-26"'
       upload_to_testflight:
         description: "Upload to TestFlight on merges to main"
         type: boolean
