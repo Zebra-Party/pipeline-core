@@ -57,7 +57,9 @@ EXISTING=$(security list-keychains -d user | tr -d '"' | tr '\n' ' ')
 security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING
 security default-keychain -s "$KEYCHAIN_PATH"
 security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
-    -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+    -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" \
+    && echo "Partition list set OK" \
+    || echo "::warning::set-key-partition-list failed (exit $?) — runner may lack security-agent access"
 
 # macOS: optionally import the Mac Installer Distribution cert for signed .pkg.
 if [ "$PLATFORM" = "macos" ] && [ -n "${APPLE_MAC_INSTALLER_P12_BASE64:-}" ]; then
