@@ -32,8 +32,11 @@ set -euo pipefail
 : "${PLATFORM:?missing PLATFORM — set to ios, macos, or appletvos}"
 
 WORK_DIR="${RUNNER_TEMP:-$(mktemp -d)}"
-KEYCHAIN_PATH="$WORK_DIR/build-${PLATFORM}.keychain-db"
-echo "Runner: $(hostname), user: $(whoami), WORK_DIR=$WORK_DIR"
+# Place the keychain inside ~/Library/Keychains/ — securityd restricts
+# writes to keychains outside the standard directory on macOS 14+.
+mkdir -p "$HOME/Library/Keychains"
+KEYCHAIN_PATH="$HOME/Library/Keychains/build-${PLATFORM}.keychain-db"
+echo "Runner: $(hostname), user: $(whoami), WORK_DIR=$WORK_DIR, KEYCHAIN=$KEYCHAIN_PATH"
 KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
 CERT_PATH="$WORK_DIR/certificate-${PLATFORM}.p12"
 
