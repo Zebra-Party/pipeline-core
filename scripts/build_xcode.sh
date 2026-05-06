@@ -66,13 +66,17 @@ fi
 
 # Re-unlock and re-establish keychain access before xcodebuild.
 # The partition list and search list can be reset between steps on some runners.
+# list-keychains must come before set-key-partition-list so securityd can see
+# the keychain when updating partition ACLs.
 security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
-    -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 EXISTING=$(security list-keychains -d user | tr -d '"' | tr '\n' ' ')
 # shellcheck disable=SC2086  # word-split is intentional here
 security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING
 security default-keychain -s "$KEYCHAIN_PATH"
+PARTITION_LIST="apple-tool:,apple:,codesign:"
+[ "$PLATFORM" = "macos" ] && PARTITION_LIST="${PARTITION_LIST},productbuild:"
+security set-key-partition-list -S "$PARTITION_LIST" \
+    -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
 VERSION_ARGS=()

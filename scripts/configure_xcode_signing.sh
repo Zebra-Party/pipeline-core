@@ -51,19 +51,19 @@ security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
 security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -k "$KEYCHAIN_PATH" -A
-security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
-    -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
 EXISTING=$(security list-keychains -d user | tr -d '"' | tr '\n' ' ')
+# shellcheck disable=SC2086  # word-split is intentional here
 security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING
 security default-keychain -s "$KEYCHAIN_PATH"
+security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
+    -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
 # macOS: optionally import the Mac Installer Distribution cert for signed .pkg.
 if [ "$PLATFORM" = "macos" ] && [ -n "${APPLE_MAC_INSTALLER_P12_BASE64:-}" ]; then
     INSTALLER_CERT_PATH="$WORK_DIR/installer_certificate.p12"
     echo "$APPLE_MAC_INSTALLER_P12_BASE64" | base64 --decode > "$INSTALLER_CERT_PATH"
-    security import "$INSTALLER_CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -k "$KEYCHAIN_PATH" \
-        -T /usr/bin/productbuild
+    security import "$INSTALLER_CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -k "$KEYCHAIN_PATH" -A
     security set-key-partition-list -S "apple-tool:,apple:,codesign:,productbuild:" \
         -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
     echo "Mac Installer cert imported"
