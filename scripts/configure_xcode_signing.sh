@@ -50,16 +50,17 @@ security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
 security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
 security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -k "$KEYCHAIN_PATH" -A
-
+# Add to search list and set as default BEFORE importing — setting as default
+# is required so that xcodebuild's internal codesign subprocess can reach
+# the private key without errSecInternalComponent (mirrors configure_ios_signing.sh).
 EXISTING=$(security list-keychains -d user | tr -d '"' | tr '\n' ' ')
 # shellcheck disable=SC2086  # word-split is intentional here
 security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING
 security default-keychain -s "$KEYCHAIN_PATH"
+security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -k "$KEYCHAIN_PATH" \
+    -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcodebuild
 security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
-    -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" \
-    && echo "Partition list set OK" \
-    || echo "::warning::set-key-partition-list failed (exit $?) — runner may lack security-agent access"
+    -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
 # macOS: optionally import the Mac Installer Distribution cert for signed .pkg.
 if [ "$PLATFORM" = "macos" ] && [ -n "${APPLE_MAC_INSTALLER_P12_BASE64:-}" ]; then
