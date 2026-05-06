@@ -112,12 +112,21 @@ echo "  Bundle  : $BUNDLE_ID"
 EXPORT_OPTIONS_PATH="${EXPORT_OPTIONS_PATH:-build/ExportOptions-${PLATFORM}.plist}"
 mkdir -p "$(dirname "$EXPORT_OPTIONS_PATH")"
 
-ICLOUD_ENV_KEY=""
+MACOS_EXTRA_KEYS=""
 if [ "$PLATFORM" = "macos" ]; then
     # CloudKit requires the container environment to be declared explicitly
     # for app-store-connect exports; omitting it causes an export failure.
-    ICLOUD_ENV_KEY="    <key>iCloudContainerEnvironment</key>
-    <string>Production</string>"
+    #
+    # signingCertificate / installerSigningCertificate tell xcodebuild
+    # exactly which cert to use for each role, preventing it from validating
+    # the installer cert against the app distribution profile (which causes
+    # "Provisioning profile doesn't include signing certificate" errors).
+    MACOS_EXTRA_KEYS="    <key>iCloudContainerEnvironment</key>
+    <string>Production</string>
+    <key>signingCertificate</key>
+    <string>Apple Distribution</string>
+    <key>installerSigningCertificate</key>
+    <string>3rd Party Mac Developer Installer</string>"
 fi
 
 cat > "$EXPORT_OPTIONS_PATH" <<PLIST
@@ -133,7 +142,7 @@ cat > "$EXPORT_OPTIONS_PATH" <<PLIST
     <string>manual</string>
     <key>uploadSymbols</key>
     <true/>
-${ICLOUD_ENV_KEY}
+${MACOS_EXTRA_KEYS}
     <key>provisioningProfiles</key>
     <dict>
         <key>${BUNDLE_ID}</key>
