@@ -53,10 +53,12 @@ security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 # Add to search list and set as default BEFORE importing — setting as default
 # is required so that xcodebuild's internal codesign subprocess can reach
 # the private key without errSecInternalComponent (mirrors configure_ios_signing.sh).
-EXISTING=$(security list-keychains -d user | tr -d '"' | tr '\n' ' ')
+EXISTING=$(security list-keychains -d user 2>/dev/null | tr -d '"' | tr '\n' ' ' || true)
 # shellcheck disable=SC2086  # word-split is intentional here
-security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING
-security default-keychain -s "$KEYCHAIN_PATH"
+security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING 2>/dev/null || true
+# Non-fatal: may fail on fresh user accounts without an initialised Library profile.
+# Codesign always uses --keychain PATH explicitly so the default is a fallback only.
+security default-keychain -s "$KEYCHAIN_PATH" 2>/dev/null || true
 security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -k "$KEYCHAIN_PATH" \
     -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcodebuild
 security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
