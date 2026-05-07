@@ -79,6 +79,14 @@ security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -k "$KEYCHAIN_PATH
 security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
     -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
+# Pin our keychain as the user's default before `security cms -D` runs
+# below — it walks the user's default keychain to validate the profile
+# signature and errors with "A default keychain could not be found"
+# if there isn't one. Mutex-protected so 5 olympus runners serialize
+# this brief global-state mutation; build_xcode.sh re-asserts it later
+# right before xcodebuild.
+keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
+
 # macOS: optionally import the Mac Installer Distribution cert for signed .pkg.
 if [ "$PLATFORM" = "macos" ] && [ -n "${APPLE_MAC_INSTALLER_P12_BASE64:-}" ]; then
     INSTALLER_CERT_PATH="$WORK_DIR/installer_certificate.p12"

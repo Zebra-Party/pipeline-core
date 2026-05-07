@@ -54,6 +54,10 @@ security import "$P12_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD"
 	-A -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcodebuild
 security set-key-partition-list -S "apple-tool:,apple:,codesign:" -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
+# Pin as the user's default keychain (mutex'd) before `security cms -D`
+# below — it needs a default keychain to validate the profile signature.
+keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
+
 # 3. Install the provisioning profile + extract its identifiers so we
 #    can compare them against the bundle id in export_presets.cfg.
 PROFILE_PLIST="$(security cms -D -i "$PROFILE_PATH")"
