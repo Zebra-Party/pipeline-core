@@ -113,8 +113,28 @@ echo "identities in our keychain:"
 security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
 echo "::endgroup::"
 
-echo "::group::Smoke-test codesign"
-keychain_smoke_test_codesign "$KEYCHAIN_PATH" || true
+echo "::group::Smoke-test codesign (retried until securityd settles)"
+# Concurrent sibling jobs running configure_xcode_signing.sh do
+# `security set-key-partition-list` on their own keychains. While that's
+# in flight, our codesign on our own keychain transiently returns
+# errSecInternalComponent — even though the keychain ends up fine.
+# Retry the smoke test a few times before declaring it broken; a
+# successful smoke is a reliable predictor of real-build success.
+SMOKE_OK=0
+for attempt in 1 2 3 4 5 6; do
+    if keychain_smoke_test_codesign "$KEYCHAIN_PATH"; then
+        SMOKE_OK=1
+        break
+    fi
+    if [ "$attempt" -lt 6 ]; then
+        echo "Smoke test failed (attempt $attempt/6) — sleeping 3s for sibling configures to settle..."
+        sleep 3
+    fi
+done
+if [ "$SMOKE_OK" -ne 1 ]; then
+    echo "::error::Smoke test still failing after 6 attempts — keychain access truly broken; aborting before xcodebuild burns time"
+    exit 1
+fi
 echo "::endgroup::"
 
 VERSION_ARGS=()
@@ -152,15 +172,20 @@ echo "::endgroup::"
 # (which is the typical cause of errSecInternalComponent at
 # `codesign --generate-entitlement-der`) is visible directly in the log.
 if [ "$ARCHIVE_RC" -ne 0 ]; then
+    set +e
     echo "::group::Post-failure entitlement diagnostic"
-    echo "## .xcent files xcodebuild produced for this archive:"
-    find "$HOME/Library/Developer/Xcode/DerivedData" -name "*.xcent" \
-        -newer "$ARCHIVE_PATH/.."/.. -print 2>/dev/null \
-        | while IFS= read -r xcent; do
-            echo
-            echo "--- $xcent ---"
-            plutil -p "$xcent" 2>/dev/null || cat "$xcent" 2>/dev/null
-        done
+    echo "## .xcent files under DerivedData (most-recently-modified last):"
+    DD="$HOME/Library/Developer/Xcode/DerivedData"
+    if [ -d "$DD" ]; then
+        # Sorted by mtime; last entries are from this build. Limit to recent
+        # ones so we don't dump every historical .xcent on the runner.
+        find "$DD" -type f -name "*.xcent" -mtime -1 2>/dev/null \
+            | while IFS= read -r xcent; do
+                echo
+                echo "--- $xcent ---"
+                plutil -p "$xcent" 2>/dev/null || cat "$xcent" 2>/dev/null || true
+            done
+    fi
     echo
     echo "## Provisioning profile Entitlements grants:"
     if [ -n "${PROFILE_UUID:-}" ]; then
@@ -178,6 +203,7 @@ if [ "$ARCHIVE_RC" -ne 0 ]; then
         echo "(no PROFILE_UUID set; skipping)"
     fi
     echo "::endgroup::"
+    set -e
     exit "$ARCHIVE_RC"
 fi
 
