@@ -78,6 +78,10 @@ security list-keychains   -d user || true
 security find-identity -v -p codesigning "${KEYCHAIN_PATH:-}" || true
 echo "::endgroup::"
 
+echo "::group::Smoke-test codesign"
+[ -n "${KEYCHAIN_PATH:-}" ] && keychain_smoke_test_codesign "$KEYCHAIN_PATH" || true
+echo "::endgroup::"
+
 echo "::group::Godot --export-release"
 "$GODOT" --headless --path . --export-release "iOS" "$IPA_PATH"
 echo "::endgroup::"

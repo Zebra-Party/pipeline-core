@@ -60,6 +60,10 @@ security list-keychains   -d user || true
 security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
 echo "::endgroup::"
 
+echo "::group::Smoke-test codesign"
+keychain_smoke_test_codesign "$KEYCHAIN_PATH" || true
+echo "::endgroup::"
+
 echo "::group::Godot --export-release"
 "$GODOT" --headless --path . --export-release "$MACOS_PRESET" "$APP_PATH"
 echo "::endgroup::"
