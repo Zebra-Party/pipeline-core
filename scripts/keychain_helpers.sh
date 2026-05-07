@@ -148,7 +148,9 @@ keychain_import_apple_intermediates() {
         fi
     done
     rm -rf "$tmp"
-    echo "Imported $imported Apple intermediate / root certificates into $kc"
+    # Diagnostic to stderr so callers that capture stdout (setup_runner_keychain
+    # via $()) don't pick this up as part of the returned keychain path.
+    echo "Imported $imported Apple intermediate / root certificates into $kc" >&2
 }
 
 # _keychain_p12_sha1 <p12_path> <p12_password>
@@ -216,31 +218,33 @@ setup_runner_keychain() {
         [ "$expected_sha1" = "$have_sha1" ] && need_rebuild=0
     fi
 
+    # All diagnostic output from this function goes to stderr — callers
+    # capture stdout via "$(setup_runner_keychain)" to read the kc path.
     if [ "$need_rebuild" -eq 1 ]; then
-        echo "Building runner keychain at $kc"
-        echo "  expected sha1: $expected_sha1"
-        echo "  have sha1:     ${have_sha1:-(none)}"
+        echo "Building runner keychain at $kc" >&2
+        echo "  expected sha1: $expected_sha1" >&2
+        echo "  have sha1:     ${have_sha1:-(none)}" >&2
         # Tear down any stale state. Both calls tolerate "doesn't exist".
         security delete-keychain "$kc" 2>/dev/null || true
         rm -f "$kc"
         # Create. Same password as the .p12 so we don't need a separate secret.
-        security create-keychain -p "$pw" "$kc"
+        security create-keychain -p "$pw" "$kc" >&2
         # No -t (idle timeout) and no -l (lock-on-sleep): the keychain
         # stays unlocked between jobs so subsequent jobs only need to
         # detect that fact, not unlock again.
-        security set-keychain-settings "$kc"
-        security unlock-keychain -p "$pw" "$kc"
+        security set-keychain-settings "$kc" >&2
+        security unlock-keychain -p "$pw" "$kc" >&2
         # Import the distribution cert. -A allows any tool to access the
         # private key without prompting; the explicit -T entries pre-trust
         # the tools that codesign relies on.
         security import "$tmp_p12" -k "$kc" -P "$pw" \
-            -A -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcodebuild
+            -A -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcodebuild >&2
         security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
-            -s -k "$pw" "$kc" >/dev/null
+            -s -k "$pw" "$kc" >/dev/null 2>&1
         # Apple intermediates so the chain validates inside this kc.
         keychain_import_apple_intermediates "$kc"
     else
-        echo "Reusing runner keychain at $kc (sha1 $have_sha1)"
+        echo "Reusing runner keychain at $kc (sha1 $have_sha1)" >&2
     fi
 
     # Optional Mac Installer cert. Imported into the same kc so productbuild
@@ -252,15 +256,15 @@ setup_runner_keychain() {
         expected_inst_sha1=$(_keychain_p12_sha1 "$tmp_inst" "$pw")
         have_inst_sha1=$(_keychain_first_identity_sha1 "$kc" "3rd Party Mac Developer Installer|Mac Installer Distribution")
         if [ -n "$expected_inst_sha1" ] && [ "$expected_inst_sha1" != "$have_inst_sha1" ]; then
-            echo "Updating Mac Installer cert in $kc"
-            echo "  expected sha1: $expected_inst_sha1"
-            echo "  have sha1:     ${have_inst_sha1:-(none)}"
+            echo "Updating Mac Installer cert in $kc" >&2
+            echo "  expected sha1: $expected_inst_sha1" >&2
+            echo "  have sha1:     ${have_inst_sha1:-(none)}" >&2
             if [ -n "$have_inst_sha1" ]; then
                 security delete-identity -Z "$have_inst_sha1" "$kc" 2>/dev/null || true
             fi
-            security import "$tmp_inst" -k "$kc" -P "$pw" -A
+            security import "$tmp_inst" -k "$kc" -P "$pw" -A >&2
             security set-key-partition-list -S "apple-tool:,apple:,codesign:,productbuild:" \
-                -s -k "$pw" "$kc" >/dev/null
+                -s -k "$pw" "$kc" >/dev/null 2>&1
         fi
         rm -f "$tmp_inst"
     fi
@@ -268,5 +272,7 @@ setup_runner_keychain() {
     # Ensure unlocked (defensive — a system event could have locked it).
     security unlock-keychain -p "$pw" "$kc" 2>/dev/null || true
 
+    # Only the keychain path goes to stdout — everything else is on stderr
+    # so `KEYCHAIN_PATH="$(setup_runner_keychain)"` captures just the path.
     printf '%s\n' "$kc"
 }
