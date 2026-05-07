@@ -54,6 +54,11 @@ security import "$P12_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD"
 	-A -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcodebuild
 security set-key-partition-list -S "apple-tool:,apple:,codesign:" -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
+# Pull the Apple intermediates so codesign (called by Godot's iOS exporter
+# without --keychain, but bound to this keychain via the search list +
+# default below) can validate the trust chain locally.
+keychain_import_apple_intermediates "$KEYCHAIN_PATH"
+
 # Pin as the user's default keychain (mutex'd) before `security cms -D`
 # below — it needs a default keychain to validate the profile signature.
 keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"

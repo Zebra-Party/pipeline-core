@@ -79,6 +79,12 @@ security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -k "$KEYCHAIN_PATH
 security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
     -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
+# Codesign with --keychain only searches that one keychain for the leaf
+# cert AND the chain back to a trust root. Pull the Apple intermediates
+# in from the system keychain so Distribution → WWDR → Apple Root
+# resolves locally and we don't get errSecInternalComponent.
+keychain_import_apple_intermediates "$KEYCHAIN_PATH"
+
 # Pin our keychain as the user's default before `security cms -D` runs
 # below — it walks the user's default keychain to validate the profile
 # signature and errors with "A default keychain could not be found"
