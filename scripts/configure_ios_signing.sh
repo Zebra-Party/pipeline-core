@@ -37,16 +37,21 @@ echo "$APPLE_IOS_DISTRIBUTION_PROVISION" | base64 --decode > "$PROFILE_PATH"
 
 # 2. Create & unlock a fresh keychain so we don't pollute the runner's login keychain.
 security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+# Idle timeout but no -l so the keychain doesn't lock on system sleep.
+security set-keychain-settings -t 21600 -u "$KEYCHAIN_PATH"
 security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 # Godot's iOS exporter calls codesign internally without --keychain, so
 # we need this keychain on the user's search list to be discoverable.
 # Mutex the read-modify-write so 5 concurrent runners on the same user
-# don't trample each other. Never touch the *default* keychain.
+# don't trample each other. (build_ios.sh's keychain_assert_active also
+# pins this as the default keychain just before the export step.)
 keychain_search_list_add "$KEYCHAIN_PATH"
 
+# -A + -T: allow all apps + explicitly trust the codesign / security /
+# xcodebuild binaries. Belt + braces against errSecInternalComponent
+# from xcodebuild helpers whose codesign path doesn't match /usr/bin/.
 security import "$P12_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" \
-	-T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcodebuild
+	-A -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcodebuild
 security set-key-partition-list -S "apple-tool:,apple:,codesign:" -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
 # 3. Install the provisioning profile + extract its identifiers so we

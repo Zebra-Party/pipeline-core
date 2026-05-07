@@ -18,12 +18,12 @@ while IFS= read -r scene; do
 	echo "::group::Boot $name"
 	output_file="/tmp/boot_${name}.log"
 	"$GODOT" --headless --quit-after 60 "res://$scene" > "$output_file" 2>&1 || true
-	# Strip known-benign headless noise. FreeType's "Error loading font" and
-	# the matching _ensure_cache_for_size condition errors are emitted by
-	# FontFile.load() under --headless even though the fonts work fine for
-	# layout — they print from C and Engine.print_error_messages can't mute
-	# them. Strip before grepping so they don't trip the smoke test.
-	filtered=$(grep -ivE 'FreeType: Error loading font|_ensure_cache_for_size' "$output_file" || true)
+	# Strip known-benign headless noise. Under --headless on macOS, Godot's
+	# FontFile.load() emits FreeType + _ensure_cache_for_size errors and
+	# downstream HarfBuzz emits "Parameter "hb_font" is null" while text
+	# is still laid out fine. These print from C / Engine.print_error_messages
+	# can't mute them, so strip before grepping for real failures.
+	filtered=$(grep -ivE 'FreeType: Error loading font|_ensure_cache_for_size|Parameter "hb_font" is null' "$output_file" || true)
 	if printf '%s\n' "$filtered" | grep -iE "SCRIPT ERROR|Parse Error|ERROR:" >/dev/null; then
 		echo "❌ $name produced errors:"
 		printf '%s\n' "$filtered" | grep -iE "SCRIPT ERROR|Parse Error|ERROR:"
