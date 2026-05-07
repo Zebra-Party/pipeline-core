@@ -118,6 +118,37 @@ keychain_search_list_remove() {
     return $rc
 }
 
+# keychain_import_apple_intermediates <keychain_path>
+# Codesign with `--keychain PATH` only searches that keychain for the
+# leaf cert *and its trust chain*. The Apple WWDR / DEV-ID-CS / G6
+# intermediates live in /Library/Keychains/System.keychain on macOS;
+# without copying them into the build keychain, the chain Distribution
+# -> WWDR -> Apple Root fails to assemble and codesign returns
+# errSecInternalComponent. Extract everything Apple-issued from the
+# system keychain in PEM form and re-import into the build keychain
+# so the chain validates locally.
+keychain_import_apple_intermediates() {
+    local kc="${1:?keychain path required}"
+    local sys="/Library/Keychains/System.keychain"
+    local tmp
+    tmp=$(mktemp -d)
+    local imported=0
+    local cert
+    for cert in "Apple Worldwide Developer Relations" \
+                "Developer ID Certification Authority" \
+                "Apple Application Integration"; do
+        local pem="$tmp/${cert// /_}.pem"
+        if security find-certificate -p -c "$cert" "$sys" >"$pem" 2>/dev/null \
+            && [ -s "$pem" ]; then
+            if security import "$pem" -k "$kc" -A 2>/dev/null; then
+                imported=$((imported + 1))
+            fi
+        fi
+    done
+    rm -rf "$tmp"
+    echo "Imported $imported Apple intermediate certificates into $kc"
+}
+
 # keychain_assert_active <keychain_path> <password>
 # Brief critical section that re-establishes the build keychain as
 # usable for the next xcodebuild step:

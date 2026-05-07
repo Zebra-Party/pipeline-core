@@ -44,6 +44,10 @@ security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -f pkcs12 -k "$
 security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
 	-s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
+# Pull Apple intermediates so the trust chain validates inside this
+# keychain alone (avoids errSecInternalComponent under --keychain).
+keychain_import_apple_intermediates "$KEYCHAIN_PATH"
+
 # Godot's macOS export reads identities from the user's search list, and
 # `security cms -D` below needs a default keychain to validate the
 # profile signature. keychain_assert_active does both under the mutex.
