@@ -19,12 +19,15 @@
 
 set -euo pipefail
 
+# shellcheck source=keychain_helpers.sh
+. "$(dirname "${BASH_SOURCE[0]}")/keychain_helpers.sh"
+
 : "${APPLE_CERTIFICATE_P12_BASE64:?missing}"
 : "${APPLE_CERTIFICATE_PASSWORD:?missing}"
 : "${APPLE_MACOS_DISTRIBUTION_PROVISION:?missing}"
 
 WORK_DIR="${RUNNER_TEMP:-$(mktemp -d)}"
-KEYCHAIN_PATH="$WORK_DIR/build.keychain-db"
+KEYCHAIN_PATH="$(keychain_unique_path build-godot-macos)"
 KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
 CERT_PATH="$WORK_DIR/certificate.p12"
 PROFILE_PATH="$WORK_DIR/profile.provisionprofile"
@@ -32,7 +35,6 @@ PROFILE_PATH="$WORK_DIR/profile.provisionprofile"
 echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERT_PATH"
 echo "$APPLE_MACOS_DISTRIBUTION_PROVISION" | base64 --decode > "$PROFILE_PATH"
 
-security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
 security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
 security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
@@ -40,9 +42,10 @@ security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -f pkcs12 -k "$
 security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
 	-s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-EXISTING=$(security list-keychains -d user | tr -d '"' | tr '\n' ' ')
-security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING
-security default-keychain -s "$KEYCHAIN_PATH"
+# Godot's macOS export reads identities from the user's search list. Add
+# under the per-machine mutex so concurrent runners don't race. Never
+# touch the *default* keychain.
+keychain_search_list_add "$KEYCHAIN_PATH"
 
 security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 

@@ -44,12 +44,15 @@ if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
 fi
 echo "Built .app: $APP_PATH"
 
-# Embed provisioning profile + re-sign.
+# Embed provisioning profile + re-sign. Pass --keychain explicitly so
+# codesign / productbuild aren't reliant on the search list at signing
+# time (5 olympus runners modify it concurrently).
 cp "$PROFILE_PATH" "$APP_PATH/Contents/embedded.provisionprofile"
 IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
 	| grep "Apple Distribution" | head -1 | sed 's/.*"\(.*\)".*/\1/')
 xattr -cr "$APP_PATH"
-codesign --force --options runtime --timestamp --sign "$IDENTITY" "$APP_PATH"
+codesign --force --options runtime --timestamp --keychain "$KEYCHAIN_PATH" \
+	--sign "$IDENTITY" "$APP_PATH"
 echo "Re-signed: $IDENTITY"
 
 # Create .pkg — signed if an installer cert is available, unsigned otherwise.
@@ -58,7 +61,8 @@ INSTALLER_IDENTITY=$(security find-identity -v "$KEYCHAIN_PATH" \
 	| head -1 | sed 's/.*"\(.*\)".*/\1/' || true)
 
 if [ -n "$INSTALLER_IDENTITY" ]; then
-	productbuild --component "$APP_PATH" /Applications --sign "$INSTALLER_IDENTITY" "$PKG_PATH"
+	productbuild --component "$APP_PATH" /Applications \
+		--sign "$INSTALLER_IDENTITY" --keychain "$KEYCHAIN_PATH" "$PKG_PATH"
 	echo "Signed .pkg: $PKG_PATH"
 else
 	echo "::warning::No installer cert — producing unsigned .pkg (TestFlight upload will fail without it)"

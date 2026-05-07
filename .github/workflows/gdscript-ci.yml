@@ -21,9 +21,9 @@ on:
         type: string
         default: "4.6.2-stable"
       runner:
-        description: 'JSON array of runner labels, e.g. ["self-hosted","Linux","X64"]'
+        description: 'JSON array of runner labels'
         type: string
-        default: '["self-hosted", "Linux", "X64"]'
+        default: '["self-hosted", "macOS", "olympus"]'
       lint_dirs:
         description: "Space-separated directories to pass to gdformat/gdlint"
         type: string

@@ -22,7 +22,7 @@ on:
       runner:
         description: 'JSON array of runner labels'
         type: string
-        default: '"ubuntu-latest"'
+        default: '["self-hosted", "macOS", "olympus"]'
       app_name:
         description: "Base filename for the APK (no extension)"
         type: string

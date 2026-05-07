@@ -26,17 +26,19 @@
 
 set -euo pipefail
 
+# shellcheck source=keychain_helpers.sh
+. "$(dirname "${BASH_SOURCE[0]}")/keychain_helpers.sh"
+
 : "${APPLE_CERTIFICATE_P12_BASE64:?missing APPLE_CERTIFICATE_P12_BASE64}"
 : "${APPLE_CERTIFICATE_PASSWORD:?missing APPLE_CERTIFICATE_PASSWORD}"
 : "${APPLE_DISTRIBUTION_PROVISION:?missing APPLE_DISTRIBUTION_PROVISION}"
 : "${PLATFORM:?missing PLATFORM — set to ios, macos, or appletvos}"
 
 WORK_DIR="${RUNNER_TEMP:-$(mktemp -d)}"
-# Place the keychain inside ~/Library/Keychains/ — securityd restricts
-# writes to keychains outside the standard directory on macOS 14+.
-mkdir -p "$HOME/Library/Keychains"
-KEYCHAIN_PATH="$HOME/Library/Keychains/build-${PLATFORM}.keychain-db"
-echo "Runner: $(hostname), user: $(whoami), WORK_DIR=$WORK_DIR, KEYCHAIN=$KEYCHAIN_PATH"
+# Per-job keychain path so concurrent runners on the same user account
+# don't share or fight over a single file. See keychain_helpers.sh.
+KEYCHAIN_PATH="$(keychain_unique_path "build-${PLATFORM}")"
+echo "Runner: ${RUNNER_NAME:-$(hostname)}, user: $(whoami), WORK_DIR=$WORK_DIR, KEYCHAIN=$KEYCHAIN_PATH"
 KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
 CERT_PATH="$WORK_DIR/certificate-${PLATFORM}.p12"
 
@@ -58,19 +60,14 @@ if ! security list-keychains -d user &>/dev/null; then
     security create-keychain -p "" "$HOME/Library/Keychains/login.keychain-db" 2>/dev/null || true
 fi
 
-security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
 security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
 security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-# Add to search list and set as default BEFORE importing — setting as default
-# is required so that xcodebuild's internal codesign subprocess can reach
-# the private key without errSecInternalComponent (mirrors configure_ios_signing.sh).
-EXISTING=$(security list-keychains -d user 2>/dev/null | tr -d '"' | tr '\n' ' ' || true)
-# shellcheck disable=SC2086  # word-split is intentional here
-security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING 2>/dev/null || true
-# Non-fatal: may fail on fresh user accounts without an initialised Library profile.
-# Codesign always uses --keychain PATH explicitly so the default is a fallback only.
-security default-keychain -s "$KEYCHAIN_PATH" 2>/dev/null || true
+# Add to the user's search list under the per-machine mutex so concurrent
+# runners don't race on this read-modify-write. We never touch the
+# *default* keychain — xcodebuild gets --keychain via OTHER_CODE_SIGN_FLAGS
+# and codesign / productbuild calls pass --keychain explicitly.
+keychain_search_list_add "$KEYCHAIN_PATH"
 security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -k "$KEYCHAIN_PATH" \
     -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcodebuild
 security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
