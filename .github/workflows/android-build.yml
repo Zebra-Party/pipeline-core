@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Zebra-Party/pipeline-core
-          ref: runner-migration
+          ref: main
           path: .pipeline-core
 
       - uses: actions/setup-java@v5
