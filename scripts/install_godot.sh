@@ -75,7 +75,7 @@ elif [ "$OS_KIND" = "macos" ] && [ ! -f "$templates_dir/ios.zip" ]; then
 fi
 
 if [ "$needs_install" = "true" ]; then
-	echo "Downloading export templates $GODOT_VERSION…"
+	echo "Downloading export templates ${GODOT_VERSION}…"
 	mkdir -p "$templates_dir"
 	curl -fsSL -o "$bin_dir/templates.tpz" \
 		"https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz"

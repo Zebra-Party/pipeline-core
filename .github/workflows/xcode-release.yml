@@ -76,6 +76,9 @@ jobs:
           ref: runner-migration
           path: .pipeline-core
 
+      - name: Select Xcode
+        run: bash .pipeline-core/scripts/select_xcode.sh
+
       - name: Check signing secrets
         id: signing
         env:
@@ -151,6 +154,9 @@ jobs:
           repository: Zebra-Party/pipeline-core
           ref: runner-migration
           path: .pipeline-core
+
+      - name: Select Xcode
+        run: bash .pipeline-core/scripts/select_xcode.sh
 
       - name: Check signing secrets
         id: signing
@@ -228,6 +234,9 @@ jobs:
           repository: Zebra-Party/pipeline-core
           ref: runner-migration
           path: .pipeline-core
+
+      - name: Select Xcode
+        run: bash .pipeline-core/scripts/select_xcode.sh
 
       - name: Check signing secrets
         id: signing
