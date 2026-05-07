@@ -21,7 +21,7 @@ on:
         default: "4.6.2-stable"
       runner:
         type: string
-        default: '["self-hosted", "macOS", "X64"]'
+        default: '["self-hosted", "macOS", "olympus"]'
       app_name:
         description: "Base filename for .app / .pkg (no extension)"
         type: string
@@ -119,8 +119,9 @@ jobs:
       - name: Clean up keychain
         if: always() && env.KEYCHAIN_PATH != ''
         run: |
-          security default-keychain -s ~/Library/Keychains/login.keychain-db 2>/dev/null || true
-          security delete-keychain "$KEYCHAIN_PATH" || true
+          # shellcheck source=/dev/null
+          . .pipeline-core/scripts/keychain_helpers.sh
+          keychain_destroy "$KEYCHAIN_PATH"
 
       - name: Restore export_presets.cfg
         if: always()

@@ -16,12 +16,17 @@
 
 set -euo pipefail
 
+# shellcheck source=keychain_helpers.sh
+. "$(dirname "${BASH_SOURCE[0]}")/keychain_helpers.sh"
+
 : "${APPLE_CERTIFICATE_P12_BASE64:?missing}"
 : "${APPLE_CERTIFICATE_PASSWORD:?missing}"
 : "${APPLE_IOS_DISTRIBUTION_PROVISION:?missing}"
 
 WORK_DIR="$(mktemp -d)"
-KEYCHAIN_PATH="$WORK_DIR/build.keychain-db"
+# Per-job keychain so 5 olympus runners on the same user account never
+# fight over a single file or its search-list entry.
+KEYCHAIN_PATH="$(keychain_unique_path build-godot-ios)"
 KEYCHAIN_PASSWORD="$(uuidgen)"
 P12_PATH="$WORK_DIR/cert.p12"
 PROFILE_PATH="$WORK_DIR/profile.mobileprovision"
@@ -34,12 +39,11 @@ echo "$APPLE_IOS_DISTRIBUTION_PROVISION" | base64 --decode > "$PROFILE_PATH"
 security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
 security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-# Add to search list first, then set as default. Setting as default is
-# required so that xcodebuild's internal codesign subprocess can reach
-# the private key — omitting it causes errSecInternalComponent.
-EXISTING=$(security list-keychains -d user | tr -d '"' | tr '\n' ' ')
-security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING
-security default-keychain -s "$KEYCHAIN_PATH"
+# Godot's iOS exporter calls codesign internally without --keychain, so
+# we need this keychain on the user's search list to be discoverable.
+# Mutex the read-modify-write so 5 concurrent runners on the same user
+# don't trample each other. Never touch the *default* keychain.
+keychain_search_list_add "$KEYCHAIN_PATH"
 
 security import "$P12_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" \
 	-T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcodebuild
