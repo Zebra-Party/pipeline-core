@@ -15,10 +15,13 @@
 #      We do still set it (some code paths inside Xcode reach for the
 #      default even when we pass --keychain explicitly — empirically
 #      that's what trips errSecInternalComponent in xcodebuild's archive
-#      step on multi-runner setups). It's set under the same mutex,
-#      and we don't bother resetting it on cleanup — whichever runner
-#      finishes last leaves their (now-deleted) keychain referenced as
-#      default until the next signing job runs and re-asserts.
+#      step on multi-runner setups). It's set under the same mutex.
+#      On cleanup we MUST restore the default back to the user's login
+#      keychain — leaving the default pointing at a deleted per-job
+#      keychain causes trustd / identityservicesd to spin in a tight
+#      retry loop on long-lived self-hosted runners, pegging CPU and
+#      blocking TLS handshakes (including the runner listener's own
+#      long-poll, which is then marked offline by GitHub).
 
 set -euo pipefail
 
@@ -192,12 +195,30 @@ keychain_assert_active() {
 }
 
 # keychain_destroy <keychain_path>
-# Removes from search list, deletes the keychain, unlinks the file.
+# Removes from search list, restores the user's default keychain if it
+# pointed at $kc, deletes the keychain, unlinks the file.
 # Safe to call from cleanup steps with `if: always()`.
 keychain_destroy() {
     local kc="${1:-}"
     [ -z "$kc" ] && return 0
     keychain_search_list_remove "$kc" 2>/dev/null || true
+    _keychain_acquire_lock
+    {
+        local cur_default
+        cur_default=$(security default-keychain -d user 2>/dev/null \
+            | tr -d '"' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
+        if [ "$cur_default" = "$kc" ]; then
+            local login_kc="$HOME/Library/Keychains/login.keychain-db"
+            if [ -e "$login_kc" ]; then
+                security default-keychain -s "$login_kc" 2>/dev/null || true
+            else
+                # No login keychain to fall back on — clear the slot
+                # rather than leaving it pointing at a doomed file.
+                security default-keychain -s 2>/dev/null || true
+            fi
+        fi
+    } || true
+    _keychain_release_lock
     security delete-keychain "$kc" 2>/dev/null || true
     rm -f "$kc"
 }
