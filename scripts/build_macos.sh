@@ -42,8 +42,14 @@ fi
 # repoint default mid-build and our codesign trips errSecInternalComponent.
 keychain_codesign_lock_acquire
 
+# Isolate the search list to our build keychain (+ login). Sibling
+# per-job keychains hold the same Apple Distribution cert; without
+# isolation, codesign / Godot's internal signer can pick the wrong
+# keychain's private key and fail with errSecInternalComponent.
+keychain_search_list_isolate "$KEYCHAIN_PATH"
+
 # Re-assert + dump state: the lock wait can be long enough for sibling
-# cleanup to have rewritten our default keychain or search list.
+# cleanup to have rewritten our default keychain.
 if [ -n "${KEYCHAIN_PASSWORD:-}" ]; then
     security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
     keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"

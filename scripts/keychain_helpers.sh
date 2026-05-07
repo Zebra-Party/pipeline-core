@@ -134,6 +134,36 @@ keychain_search_list_remove() {
     return $rc
 }
 
+# keychain_search_list_isolate <keychain_path>
+# Replace the user's search list with exactly [<keychain_path>, login.keychain-db].
+# This is the right thing to do once a job is inside the host-wide codesign
+# lock: we want xcodebuild's identity lookup to find ONLY our build keychain's
+# copy of the signing cert, not a sibling runner's per-job keychain that also
+# has the same cert (since they all import the same .p12). Without this,
+# xcodebuild may pick an identity from kc-B while codesign was passed
+# `--keychain kc-A` — codesign looks only in kc-A for the matching private
+# key, mismatches, and returns errSecInternalComponent.
+#
+# Mutex'd alongside the other search-list mutators. Login keychain is kept
+# on the list because cleanup (keychain_destroy) doesn't restore it; leaving
+# *only* our build kc would mean the next job sees an empty search list
+# briefly between cleanup and its own assert_active.
+keychain_search_list_isolate() {
+    local kc="${1:?keychain path required}"
+    _keychain_acquire_lock
+    local rc=0
+    {
+        local login_kc="$HOME/Library/Keychains/login.keychain-db"
+        if [ -e "$login_kc" ]; then
+            security list-keychains -d user -s "$kc" "$login_kc"
+        else
+            security list-keychains -d user -s "$kc"
+        fi
+    } || rc=$?
+    _keychain_release_lock
+    return $rc
+}
+
 # keychain_import_apple_intermediates <keychain_path>
 # Codesign with `--keychain PATH` only searches that keychain for the
 # leaf cert *and its trust chain*. The Apple WWDR / DEV-ID-CS / G6
