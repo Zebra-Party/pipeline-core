@@ -164,6 +164,43 @@ keychain_search_list_isolate() {
     return $rc
 }
 
+# keychain_smoke_test_codesign <keychain_path>
+# Tries to codesign a trivial throwaway file using the Apple Distribution
+# identity in <keychain_path>. Used as a pre-build self-check — if this
+# fails with errSecInternalComponent, we know the issue is keychain access
+# (locked, partition list wrong, ACL block) rather than something specific
+# to the project's binary or entitlements. Output is verbose-4 so the
+# system surfaces whatever it can about the failure.
+#
+# Returns codesign's exit status. Caller decides whether to abort.
+keychain_smoke_test_codesign() {
+    local kc="${1:?keychain path required}"
+    local smoke
+    smoke=$(mktemp -t codesign-smoke)
+    printf '#!/bin/sh\nexit 0\n' > "$smoke"
+    chmod +x "$smoke"
+    local identity
+    identity=$(security find-identity -v -p codesigning "$kc" \
+        | grep -E "Apple Distribution" | head -1 \
+        | sed -E 's/^[[:space:]]*[0-9]+\)[[:space:]]+([0-9A-F]+).*/\1/')
+    if [ -z "$identity" ]; then
+        echo "::warning::smoke test: no Apple Distribution identity in $kc"
+        rm -f "$smoke"
+        return 1
+    fi
+    echo "Smoke-test codesign — identity: $identity"
+    local rc=0
+    codesign --force --sign "$identity" --keychain "$kc" \
+        --verbose=4 "$smoke" 2>&1 || rc=$?
+    rm -f "$smoke"
+    if [ "$rc" -eq 0 ]; then
+        echo "✓ Smoke-test codesign succeeded"
+    else
+        echo "::error::Smoke-test codesign FAILED (exit $rc) — keychain access is broken even on a trivial file. The real build will likely fail with errSecInternalComponent for the same reason."
+    fi
+    return "$rc"
+}
+
 # keychain_import_apple_intermediates <keychain_path>
 # Codesign with `--keychain PATH` only searches that keychain for the
 # leaf cert *and its trust chain*. The Apple WWDR / DEV-ID-CS / G6

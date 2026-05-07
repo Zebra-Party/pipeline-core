@@ -113,6 +113,10 @@ echo "identities in our keychain:"
 security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
 echo "::endgroup::"
 
+echo "::group::Smoke-test codesign"
+keychain_smoke_test_codesign "$KEYCHAIN_PATH" || true
+echo "::endgroup::"
+
 VERSION_ARGS=()
 [ -n "${VERSION:-}" ] && VERSION_ARGS+=(MARKETING_VERSION="$VERSION")
 [ -n "${BUILD:-}"   ] && VERSION_ARGS+=(CURRENT_PROJECT_VERSION="$BUILD")
