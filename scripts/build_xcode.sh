@@ -135,6 +135,7 @@ SIGNING_ARGS=(
 [ -n "$PROFILE_UUID" ] && SIGNING_ARGS+=(PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID")
 
 echo "::group::xcodebuild archive (${PLATFORM})"
+ARCHIVE_RC=0
 # shellcheck disable=SC2086  # PROJECT_FLAG is intentionally word-split
 xcodebuild archive \
     $PROJECT_FLAG \
@@ -143,8 +144,42 @@ xcodebuild archive \
     -configuration Release \
     -archivePath "$ARCHIVE_PATH" \
     "${SIGNING_ARGS[@]}" \
-    "${VERSION_ARGS[@]}"
+    "${VERSION_ARGS[@]}" || ARCHIVE_RC=$?
 echo "::endgroup::"
+
+# On failure, dump the .xcent (xcodebuild-generated entitlements) and the
+# provisioning profile's Entitlements dict so a mismatch between the two
+# (which is the typical cause of errSecInternalComponent at
+# `codesign --generate-entitlement-der`) is visible directly in the log.
+if [ "$ARCHIVE_RC" -ne 0 ]; then
+    echo "::group::Post-failure entitlement diagnostic"
+    echo "## .xcent files xcodebuild produced for this archive:"
+    find "$HOME/Library/Developer/Xcode/DerivedData" -name "*.xcent" \
+        -newer "$ARCHIVE_PATH/.."/.. -print 2>/dev/null \
+        | while IFS= read -r xcent; do
+            echo
+            echo "--- $xcent ---"
+            plutil -p "$xcent" 2>/dev/null || cat "$xcent" 2>/dev/null
+        done
+    echo
+    echo "## Provisioning profile Entitlements grants:"
+    if [ -n "${PROFILE_UUID:-}" ]; then
+        for ext in mobileprovision provisionprofile; do
+            pf="$HOME/Library/MobileDevice/Provisioning Profiles/${PROFILE_UUID}.${ext}"
+            if [ -f "$pf" ]; then
+                echo "--- $pf ---"
+                security cms -D -i "$pf" 2>/dev/null \
+                    | plutil -extract Entitlements xml1 -o - - 2>/dev/null \
+                    | plutil -p - 2>/dev/null \
+                    || true
+            fi
+        done
+    else
+        echo "(no PROFILE_UUID set; skipping)"
+    fi
+    echo "::endgroup::"
+    exit "$ARCHIVE_RC"
+fi
 
 if [ ! -d "$ARCHIVE_PATH" ]; then
     echo "::error::Archive not produced at $ARCHIVE_PATH"
