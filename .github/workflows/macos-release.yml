@@ -62,6 +62,9 @@ jobs:
           ref: runner-migration
           path: .pipeline-core
 
+      - name: Select Xcode
+        run: bash .pipeline-core/scripts/select_xcode.sh
+
       - name: Install Godot & export templates
         run: bash .pipeline-core/scripts/install_godot.sh "$GODOT_VERSION"
 
