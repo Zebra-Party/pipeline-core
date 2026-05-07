@@ -58,6 +58,18 @@ fi
 # as default and our codesign returns errSecInternalComponent.
 keychain_codesign_lock_acquire
 
+# Re-assert + dump state: the lock wait can be long enough for sibling
+# cleanup to have rewritten our default keychain or search list.
+if [ -n "${KEYCHAIN_PATH:-}" ] && [ -n "${KEYCHAIN_PASSWORD:-}" ]; then
+    security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+    keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
+fi
+echo "::group::Keychain state under codesign lock"
+security default-keychain -d user || true
+security list-keychains   -d user || true
+security find-identity -v -p codesigning "${KEYCHAIN_PATH:-}" || true
+echo "::endgroup::"
+
 echo "::group::Godot --export-release"
 "$GODOT" --headless --path . --export-release "iOS" "$IPA_PATH"
 echo "::endgroup::"
