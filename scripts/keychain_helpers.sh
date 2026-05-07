@@ -203,14 +203,17 @@ setup_runner_keychain() {
     mkdir -p "$HOME/Library/Keychains"
 
     # Decode the secret to a temp .p12 just long enough to fingerprint /
-    # import. Cleaned up on exit.
+    # import. Explicit cleanup at every return path — DO NOT use a RETURN
+    # trap here: bash fires RETURN traps when ANY function returns, so
+    # the trap would fire when the helper _keychain_p12_sha1 returns and
+    # delete $tmp_p12 before the subsequent `security import` reads it.
     local tmp_p12 expected_sha1
     tmp_p12=$(mktemp -t zebra-cert.XXXXXX)
-    trap 'rm -f "$tmp_p12"' RETURN
     echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$tmp_p12"
     expected_sha1=$(_keychain_p12_sha1 "$tmp_p12" "$pw")
     if [ -z "$expected_sha1" ]; then
         echo "::error::Could not extract SHA-1 from APPLE_CERTIFICATE_P12_BASE64 (wrong APPLE_CERTIFICATE_PASSWORD?)" >&2
+        rm -f "$tmp_p12"
         return 1
     fi
 
@@ -274,6 +277,8 @@ setup_runner_keychain() {
 
     # Ensure unlocked (defensive — a system event could have locked it).
     security unlock-keychain -p "$pw" "$kc" >/dev/null 2>&1 || true
+
+    rm -f "$tmp_p12"
 
     # Only the keychain path goes to stdout — everything else is on stderr
     # so `KEYCHAIN_PATH="$(setup_runner_keychain)"` captures just the path.
