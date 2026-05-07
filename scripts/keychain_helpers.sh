@@ -142,7 +142,10 @@ keychain_import_apple_intermediates() {
             && [ -s "$pem" ]; then
             local count
             count=$(grep -c 'BEGIN CERTIFICATE' "$pem" || echo 0)
-            if security import "$pem" -k "$kc" -A 2>/dev/null; then
+            # Silence stdout — `security import` prints "N certificate(s)
+            # imported.", which would otherwise leak into a caller's
+            # $(setup_runner_keychain) capture and break the captured path.
+            if security import "$pem" -k "$kc" -A >/dev/null 2>&1; then
                 imported=$((imported + count))
             fi
         fi
@@ -213,7 +216,7 @@ setup_runner_keychain() {
 
     # Decide: rebuild or reuse?
     local need_rebuild=1 have_sha1=""
-    if [ -f "$kc" ] && security unlock-keychain -p "$pw" "$kc" 2>/dev/null; then
+    if [ -f "$kc" ] && security unlock-keychain -p "$pw" "$kc" >/dev/null 2>&1; then
         have_sha1=$(_keychain_first_identity_sha1 "$kc" "Apple Distribution")
         [ "$expected_sha1" = "$have_sha1" ] && need_rebuild=0
     fi
@@ -270,7 +273,7 @@ setup_runner_keychain() {
     fi
 
     # Ensure unlocked (defensive — a system event could have locked it).
-    security unlock-keychain -p "$pw" "$kc" 2>/dev/null || true
+    security unlock-keychain -p "$pw" "$kc" >/dev/null 2>&1 || true
 
     # Only the keychain path goes to stdout — everything else is on stderr
     # so `KEYCHAIN_PATH="$(setup_runner_keychain)"` captures just the path.
