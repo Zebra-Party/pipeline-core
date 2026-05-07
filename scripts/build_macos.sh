@@ -29,39 +29,24 @@ PROFILE_PATH="$HOME/Library/MobileDevice/Provisioning Profiles/${MACOS_PROVISION
 
 mkdir -p "$BUILD_DIR"
 
-# Pin our keychain as default + ensure it's in the search list under
-# the mutex; required because Godot's macOS export shells out to
-# codesign without --keychain and falls back to the user's default.
-if [ -n "${KEYCHAIN_PASSWORD:-}" ]; then
-    keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
-fi
-
-# Hold the host-wide codesign lock across export + re-sign + productbuild.
-# The default keychain is single-slot global state shared across all
-# runners on this user; without serialisation a sibling runner can
-# repoint default mid-build and our codesign trips errSecInternalComponent.
+# Hold the host-wide codesign lock + isolate the search list. Sibling
+# runners' persistent keychains hold the same Apple Distribution cert,
+# and Godot's macOS exporter shells out to codesign without --keychain;
+# without isolation, identity lookup is non-deterministic.
 keychain_codesign_lock_acquire
-
-# Isolate the search list to our build keychain (+ login). Sibling
-# per-job keychains hold the same Apple Distribution cert; without
-# isolation, codesign / Godot's internal signer can pick the wrong
-# keychain's private key and fail with errSecInternalComponent.
 keychain_search_list_isolate "$KEYCHAIN_PATH"
 
-# Re-assert + dump state: the lock wait can be long enough for sibling
-# cleanup to have rewritten our default keychain.
+# Defensive unlock + pin as default keychain (some Godot subroutines
+# fall back to the default).
 if [ -n "${KEYCHAIN_PASSWORD:-}" ]; then
-    security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-    keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
+    security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" 2>/dev/null || true
 fi
+security default-keychain -s "$KEYCHAIN_PATH"
+
 echo "::group::Keychain state under codesign lock"
 security default-keychain -d user || true
 security list-keychains   -d user || true
 security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
-echo "::endgroup::"
-
-echo "::group::Smoke-test codesign"
-keychain_smoke_test_codesign "$KEYCHAIN_PATH" || true
 echo "::endgroup::"
 
 echo "::group::Godot --export-release"

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Sets up Apple signing for a native Xcode build (iOS, macOS, or tvOS).
-# Imports the distribution cert into a temporary keychain, installs the
-# provisioning profile, and writes an ExportOptions.plist for the platform.
+# Ensures the per-runner persistent keychain has the current cert (lazy
+# build via setup_runner_keychain), installs the provisioning profile,
+# and writes an ExportOptions.plist for the platform.
 #
 # Required env vars:
 #   APPLE_CERTIFICATE_P12_BASE64  — base64-encoded distribution .p12
@@ -35,12 +36,6 @@ set -euo pipefail
 : "${PLATFORM:?missing PLATFORM — set to ios, macos, or appletvos}"
 
 WORK_DIR="${RUNNER_TEMP:-$(mktemp -d)}"
-# Per-job keychain path so concurrent runners on the same user account
-# don't share or fight over a single file. See keychain_helpers.sh.
-KEYCHAIN_PATH="$(keychain_unique_path "build-${PLATFORM}")"
-echo "Runner: ${RUNNER_NAME:-$(hostname)}, user: $(whoami), WORK_DIR=$WORK_DIR, KEYCHAIN=$KEYCHAIN_PATH"
-KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
-CERT_PATH="$WORK_DIR/certificate-${PLATFORM}.p12"
 
 if [ "$PLATFORM" = "macos" ]; then
     PROFILE_EXT="provisionprofile"
@@ -48,64 +43,13 @@ else
     PROFILE_EXT="mobileprovision"
 fi
 PROFILE_PATH="$WORK_DIR/profile-${PLATFORM}.${PROFILE_EXT}"
+echo "$APPLE_DISTRIBUTION_PROVISION" | base64 --decode > "$PROFILE_PATH"
 
-echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERT_PATH"
-echo "$APPLE_DISTRIBUTION_PROVISION"  | base64 --decode > "$PROFILE_PATH"
-
-# Ensure the user's keychain domain is initialised (required on accounts that
-# have never had a GUI login; without this, security import fails with
-# "Write permissions error / problem decoding").
-if ! security list-keychains -d user &>/dev/null; then
-    echo "Initialising keychain domain for $(whoami)"
-    security create-keychain -p "" "$HOME/Library/Keychains/login.keychain-db" 2>/dev/null || true
-fi
-
-security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-# -t 21600: 6-hour idle timeout; intentionally NO -l so the keychain
-# doesn't lock on system sleep mid-build.
-security set-keychain-settings -t 21600 -u "$KEYCHAIN_PATH"
-security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-# Add to the user's search list under the cross-runner mutex; the default
-# keychain is set later in build_xcode.sh's keychain_assert_active call,
-# also under the mutex.
-keychain_search_list_add "$KEYCHAIN_PATH"
-# -A: allow all apps to access the key without prompting.
-# -T <path>: also explicitly trust those binaries even with -A.
-# Belt + braces — Xcode's archive path spawns helpers like swiftStdLibTool
-# whose codesign call sometimes resolves to a different binary path,
-# tripping errSecInternalComponent if -A isn't set.
-security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -k "$KEYCHAIN_PATH" \
-    -A -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcodebuild
-security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
-    -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-# Codesign with --keychain only searches that one keychain for the leaf
-# cert AND the chain back to a trust root. Pull the Apple intermediates
-# in from the system keychain so Distribution → WWDR → Apple Root
-# resolves locally and we don't get errSecInternalComponent.
-keychain_import_apple_intermediates "$KEYCHAIN_PATH"
-
-# Pin our keychain as the user's default before `security cms -D` runs
-# below — it walks the user's default keychain to validate the profile
-# signature and errors with "A default keychain could not be found"
-# if there isn't one. Mutex-protected so 5 olympus runners serialize
-# this brief global-state mutation; build_xcode.sh re-asserts it later
-# right before xcodebuild.
-keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
-
-# macOS: optionally import the Mac Installer Distribution cert for signed .pkg.
-if [ "$PLATFORM" = "macos" ] && [ -n "${APPLE_MAC_INSTALLER_P12_BASE64:-}" ]; then
-    INSTALLER_CERT_PATH="$WORK_DIR/installer_certificate.p12"
-    echo "$APPLE_MAC_INSTALLER_P12_BASE64" | base64 --decode > "$INSTALLER_CERT_PATH"
-    security import "$INSTALLER_CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -k "$KEYCHAIN_PATH" -A
-    security set-key-partition-list -S "apple-tool:,apple:,codesign:,productbuild:" \
-        -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-    echo "Mac Installer cert imported"
-else
-    [ "$PLATFORM" = "macos" ] && echo "No APPLE_MAC_INSTALLER_P12_BASE64 — .pkg will be unsigned"
-fi
-
-security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+# Build (or refresh) the runner's persistent keychain. setup_runner_keychain
+# is idempotent — fast path is just an unlock when the cert hasn't rotated.
+KEYCHAIN_PATH="$(setup_runner_keychain)"
+KEYCHAIN_PASSWORD="$APPLE_CERTIFICATE_PASSWORD"
+echo "Runner: ${RUNNER_NAME:-$(hostname)}, user: $(whoami), keychain: $KEYCHAIN_PATH"
 
 # Decode the provisioning profile and extract identifiers.
 PLIST="$(security cms -D -i "$PROFILE_PATH")"

@@ -116,13 +116,6 @@ jobs:
           fi
           bash .pipeline-core/scripts/upload_ios.sh
 
-      - name: Clean up keychain
-        if: always() && env.KEYCHAIN_PATH != ''
-        run: |
-          # shellcheck source=/dev/null
-          . .pipeline-core/scripts/keychain_helpers.sh
-          keychain_destroy "$KEYCHAIN_PATH"
-
       - name: Restore export_presets.cfg
         if: always()
         run: git checkout -- export_presets.cfg || true

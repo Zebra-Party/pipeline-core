@@ -131,12 +131,6 @@ jobs:
           fi
           bash .pipeline-core/scripts/upload_ios.sh
 
-      - name: Clean up keychain
-        if: always() && env.KEYCHAIN_PATH != ''
-        run: |
-          # shellcheck source=/dev/null
-          . .pipeline-core/scripts/keychain_helpers.sh
-          keychain_destroy "$KEYCHAIN_PATH"
 
   macos:
     name: macOS build & upload
@@ -211,12 +205,6 @@ jobs:
           fi
           bash .pipeline-core/scripts/upload_macos.sh
 
-      - name: Clean up keychain
-        if: always() && env.KEYCHAIN_PATH != ''
-        run: |
-          # shellcheck source=/dev/null
-          . .pipeline-core/scripts/keychain_helpers.sh
-          keychain_destroy "$KEYCHAIN_PATH"
 
   tvos:
     name: tvOS build & upload
@@ -290,9 +278,3 @@ jobs:
           fi
           bash .pipeline-core/scripts/upload_tvos.sh
 
-      - name: Clean up keychain
-        if: always() && env.KEYCHAIN_PATH != ''
-        run: |
-          # shellcheck source=/dev/null
-          . .pipeline-core/scripts/keychain_helpers.sh
-          keychain_destroy "$KEYCHAIN_PATH"
