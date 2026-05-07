@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Imports the Apple distribution cert into a temporary keychain and
-# installs the provisioning profile, then writes the team ID + UUID into
-# export_presets.cfg so Godot's iOS exporter knows which identity / profile
-# to embed in the generated Xcode project.
+# Sets up Apple Distribution signing for Godot iOS builds.
+# Ensures the per-runner persistent keychain has the current cert (lazy
+# build via setup_runner_keychain), installs the provisioning profile,
+# and patches export_presets.cfg so Godot's iOS exporter knows which
+# team / profile UUID to embed.
 #
 # Required env vars:
 #   APPLE_CERTIFICATE_P12_BASE64        — base64 of distribution .p12
@@ -13,6 +14,7 @@
 #   IOS_TEAM_ID
 #   IOS_PROVISIONING_PROFILE_UUID
 #   KEYCHAIN_PATH
+#   KEYCHAIN_PASSWORD
 
 set -euo pipefail
 
@@ -24,47 +26,14 @@ set -euo pipefail
 : "${APPLE_IOS_DISTRIBUTION_PROVISION:?missing}"
 
 WORK_DIR="$(mktemp -d)"
-# Per-job keychain so 5 olympus runners on the same user account never
-# fight over a single file or its search-list entry.
-KEYCHAIN_PATH="$(keychain_unique_path build-godot-ios)"
-KEYCHAIN_PASSWORD="$(uuidgen)"
-P12_PATH="$WORK_DIR/cert.p12"
 PROFILE_PATH="$WORK_DIR/profile.mobileprovision"
-
-# 1. Materialise the cert + profile from base64.
-echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$P12_PATH"
 echo "$APPLE_IOS_DISTRIBUTION_PROVISION" | base64 --decode > "$PROFILE_PATH"
 
-# 2. Create & unlock a fresh keychain so we don't pollute the runner's login keychain.
-security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-# Idle timeout but no -l so the keychain doesn't lock on system sleep.
-security set-keychain-settings -t 21600 -u "$KEYCHAIN_PATH"
-security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-# Godot's iOS exporter calls codesign internally without --keychain, so
-# we need this keychain on the user's search list to be discoverable.
-# Mutex the read-modify-write so 5 concurrent runners on the same user
-# don't trample each other. (build_ios.sh's keychain_assert_active also
-# pins this as the default keychain just before the export step.)
-keychain_search_list_add "$KEYCHAIN_PATH"
+KEYCHAIN_PATH="$(setup_runner_keychain)"
+KEYCHAIN_PASSWORD="$APPLE_CERTIFICATE_PASSWORD"
 
-# -A + -T: allow all apps + explicitly trust the codesign / security /
-# xcodebuild binaries. Belt + braces against errSecInternalComponent
-# from xcodebuild helpers whose codesign path doesn't match /usr/bin/.
-security import "$P12_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" \
-	-A -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcodebuild
-security set-key-partition-list -S "apple-tool:,apple:,codesign:" -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-# Pull the Apple intermediates so codesign (called by Godot's iOS exporter
-# without --keychain, but bound to this keychain via the search list +
-# default below) can validate the trust chain locally.
-keychain_import_apple_intermediates "$KEYCHAIN_PATH"
-
-# Pin as the user's default keychain (mutex'd) before `security cms -D`
-# below — it needs a default keychain to validate the profile signature.
-keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
-
-# 3. Install the provisioning profile + extract its identifiers so we
-#    can compare them against the bundle id in export_presets.cfg.
+# Install the provisioning profile + extract its identifiers so we can
+# compare them against the bundle id in export_presets.cfg.
 PROFILE_PLIST="$(security cms -D -i "$PROFILE_PATH")"
 PROFILE_UUID="$(echo "$PROFILE_PLIST" | plutil -extract UUID raw -)"
 PROFILE_NAME="$(echo "$PROFILE_PLIST" | plutil -extract Name raw -)"
@@ -86,14 +55,15 @@ echo "  Provisioning profile : $PROFILE_NAME ($PROFILE_UUID)"
 echo "  Profile team id      : $TEAM_ID"
 echo "  Profile bundle id    : $PROFILE_BUNDLE_ID"
 echo "  Preset bundle id     : $PRESET_BUNDLE_ID"
+echo "  Keychain             : $KEYCHAIN_PATH"
 if [ "$PROFILE_BUNDLE_ID" != "$PRESET_BUNDLE_ID" ] && [ "$PROFILE_BUNDLE_ID" != "*" ]; then
 	echo "::warning::Provisioning profile is for '$PROFILE_BUNDLE_ID' but the preset's bundle id is '$PRESET_BUNDLE_ID' — Godot will refuse to export."
 fi
 
-# 4. Inject team_id + provisioning profile UUID into export_presets.cfg.
-#    Mirrors what works in another shipping project: only set these two
-#    fields, leave code_sign_identity_release at "iPhone Distribution"
-#    (Godot's default), don't touch the debug block at all.
+# Inject team_id + provisioning profile UUID into export_presets.cfg.
+# Mirrors what works in another shipping project: only set these two
+# fields, leave code_sign_identity_release at "iPhone Distribution"
+# (Godot's default), don't touch the debug block at all.
 awk \
 	-v team="$TEAM_ID" \
 	-v uuid="$PROFILE_UUID" \
@@ -105,7 +75,6 @@ awk \
 mv export_presets.cfg.tmp export_presets.cfg
 
 # Surface the iOS-relevant fields so failed runs can be diagnosed.
-# (Not in a ::group:: — see comment above re collapsed-by-default.)
 echo
 echo "iOS preset after signing config:"
 awk '/^\[preset\.0\]/,/^\[preset\.[1-9]/' export_presets.cfg \

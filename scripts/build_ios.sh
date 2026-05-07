@@ -3,13 +3,14 @@
 # a signed IPA directly when application/export_project_only=false.
 #
 # Env (required):
-#   GODOT        — set by install_godot.sh
-#   KEYCHAIN_PATH — set by configure_ios_signing.sh
-#   GODOT_VERSION — set by install_godot.sh
+#   GODOT          — set by install_godot.sh
+#   KEYCHAIN_PATH  — set by configure_ios_signing.sh
+#   GODOT_VERSION  — set by install_godot.sh
 #
 # Env (optional):
-#   APP_NAME     — base filename for the IPA, no extension (default: "export")
-#   BUILD_DIR    — output directory (default: "build/ios")
+#   APP_NAME       — base filename for the IPA, no extension (default: "export")
+#   BUILD_DIR      — output directory (default: "build/ios")
+#   KEYCHAIN_PASSWORD — set by configure_ios_signing.sh; used for defensive unlock
 
 set -euo pipefail
 
@@ -28,10 +29,6 @@ mkdir -p "$BUILD_DIR"
 echo "Xcode / signing environment:"
 echo "  xcode-select: $(xcode-select -p 2>&1 || true)"
 xcodebuild -version 2>&1 | sed 's/^/  /' || true
-echo
-echo "Codesigning identities:"
-security find-identity -v -p codesigning "${KEYCHAIN_PATH:-}" 2>&1 | sed 's/^/  /' || true
-echo
 
 TEMPLATES_DIR="$HOME/Library/Application Support/Godot/export_templates/${GODOT_VERSION/-stable/.stable}"
 if [ ! -f "$TEMPLATES_DIR/ios.zip" ]; then
@@ -39,47 +36,27 @@ if [ ! -f "$TEMPLATES_DIR/ios.zip" ]; then
 	exit 1
 fi
 echo "✅ ios.zip present ($(stat -f%z "$TEMPLATES_DIR/ios.zip" 2>/dev/null || echo '?') bytes)"
-echo
 
-# Re-establish keychain state under the cross-runner mutex. Godot's
-# iOS exporter shells out to codesign without --keychain, so it relies
-# entirely on the user's search list + default keychain to find the
-# cert — both of which are global per-user state on this multi-runner
-# host. keychain_assert_active unlocks, ensures the keychain is in the
-# search list, and pins it as default, all in one mutex'd critical
-# section so concurrent runners serialize that brief moment only.
-if [ -n "${KEYCHAIN_PATH:-}" ] && [ -n "${KEYCHAIN_PASSWORD:-}" ]; then
-    keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
-fi
-
-# Hold the host-wide codesign lock across the export. The default
-# keychain is single-slot global state; without this, a sibling runner
-# that calls keychain_assert_active mid-export will set its own keychain
-# as default and our codesign returns errSecInternalComponent.
+# Hold the host-wide codesign lock + isolate the search list so Godot's
+# internal codesign (which runs without --keychain) finds only this
+# runner's identity. Sibling runners' persistent keychains all hold the
+# same Apple Distribution cert; without isolation, identity lookup is
+# non-deterministic.
 keychain_codesign_lock_acquire
+[ -n "${KEYCHAIN_PATH:-}" ] && keychain_search_list_isolate "$KEYCHAIN_PATH"
 
-# Isolate the search list to our build keychain (+ login). Sibling
-# per-job keychains hold the same Apple Distribution cert; without
-# isolation, codesign / Godot's internal signer can pick the wrong
-# keychain's private key and fail with errSecInternalComponent.
-if [ -n "${KEYCHAIN_PATH:-}" ]; then
-    keychain_search_list_isolate "$KEYCHAIN_PATH"
-fi
-
-# Re-assert + dump state: the lock wait can be long enough for sibling
-# cleanup to have rewritten our default keychain.
+# Defensive unlock + pin as default keychain. Godot's exporter calls
+# codesign without --keychain, so it relies on the user's search list +
+# default keychain. Both are now constrained to our keychain.
 if [ -n "${KEYCHAIN_PATH:-}" ] && [ -n "${KEYCHAIN_PASSWORD:-}" ]; then
-    security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-    keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
+    security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" 2>/dev/null || true
+    security default-keychain -s "$KEYCHAIN_PATH"
 fi
+
 echo "::group::Keychain state under codesign lock"
 security default-keychain -d user || true
 security list-keychains   -d user || true
 security find-identity -v -p codesigning "${KEYCHAIN_PATH:-}" || true
-echo "::endgroup::"
-
-echo "::group::Smoke-test codesign"
-[ -n "${KEYCHAIN_PATH:-}" ] && keychain_smoke_test_codesign "$KEYCHAIN_PATH" || true
 echo "::endgroup::"
 
 echo "::group::Godot --export-release"
