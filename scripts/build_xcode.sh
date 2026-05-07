@@ -89,11 +89,19 @@ security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 # clobbers our default mid-archive and we trip errSecInternalComponent.
 keychain_codesign_lock_acquire
 
+# Isolate the search list to ONLY our build keychain (+ login). Sibling
+# per-job keychains contain the same Apple Distribution cert (same .p12),
+# and xcodebuild's identity lookup walks the search list — without isolation
+# it may pick a sibling's identity, then codesign with --keychain pointing
+# at OUR kc fails with errSecInternalComponent because the matching private
+# key is in the sibling's keychain.
+keychain_search_list_isolate "$KEYCHAIN_PATH"
+
 # Diagnostics + defensive re-establish: 30+ seconds may have elapsed
 # while we waited for the lock; sibling runners' cleanup steps may have
-# rewritten the search list or default keychain in that window. Re-unlock
-# and re-assert both before xcodebuild, then dump state so any future
-# "No signing certificate" failure has the keychain context inline.
+# rewritten the default keychain in that window. Re-unlock and re-assert
+# before xcodebuild, then dump state so any future failure has the
+# keychain context inline.
 echo "::group::Keychain state under codesign lock"
 security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
