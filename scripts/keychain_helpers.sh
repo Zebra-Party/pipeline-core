@@ -104,25 +104,30 @@ keychain_search_list_add() {
 
 # keychain_search_list_remove <keychain_path>
 # Removes the keychain from the user's search list under the mutex.
+#
+# `security list-keychains -d user` emits each entry quoted and indented
+# with four spaces. We use sed to strip leading/trailing whitespace and
+# tr to drop the quotes, matching keychain_search_list_add. The previous
+# implementation used `${line## }` which only strips ONE leading space —
+# so paths never matched $kc, nothing was "removed", and the indented
+# paths were fed back to `security list-keychains -s` which collapses
+# them into a single concatenated bogus path. Result: every call here
+# silently corrupted the search list further until xcodebuild could no
+# longer find any signing identity.
 keychain_search_list_remove() {
     local kc="${1:?keychain path required}"
     _keychain_acquire_lock
     local rc=0
     {
-        local kept=()
-        local line
-        while IFS= read -r line; do
-            line="${line//\"/}"
-            line="${line## }"
-            line="${line%% }"
-            [ -z "$line" ] && continue
-            [ "$line" = "$kc" ] && continue
-            kept+=("$line")
-        done < <(security list-keychains -d user 2>/dev/null || true)
-        if [ "${#kept[@]}" -eq 0 ]; then
+        local existing
+        existing=$(security list-keychains -d user 2>/dev/null \
+            | tr -d '"' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' \
+            | grep -vxF "$kc" || true)
+        # shellcheck disable=SC2086  # word-split is intentional
+        if [ -z "$existing" ]; then
             security list-keychains -d user -s
         else
-            security list-keychains -d user -s "${kept[@]}"
+            security list-keychains -d user -s $existing
         fi
     } || rc=$?
     _keychain_release_lock

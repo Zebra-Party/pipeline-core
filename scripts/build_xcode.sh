@@ -89,6 +89,22 @@ security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 # clobbers our default mid-archive and we trip errSecInternalComponent.
 keychain_codesign_lock_acquire
 
+# Diagnostics + defensive re-establish: 30+ seconds may have elapsed
+# while we waited for the lock; sibling runners' cleanup steps may have
+# rewritten the search list or default keychain in that window. Re-unlock
+# and re-assert both before xcodebuild, then dump state so any future
+# "No signing certificate" failure has the keychain context inline.
+echo "::group::Keychain state under codesign lock"
+security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
+echo "default-keychain:"; security default-keychain -d user || true
+echo "search list:";      security list-keychains   -d user || true
+echo "identities visible to xcodebuild (search list):"
+security find-identity -v -p codesigning || true
+echo "identities in our keychain:"
+security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
+echo "::endgroup::"
+
 VERSION_ARGS=()
 [ -n "${VERSION:-}" ] && VERSION_ARGS+=(MARKETING_VERSION="$VERSION")
 [ -n "${BUILD:-}"   ] && VERSION_ARGS+=(CURRENT_PROJECT_VERSION="$BUILD")
