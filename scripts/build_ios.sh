@@ -13,6 +13,9 @@
 
 set -euo pipefail
 
+# shellcheck source=keychain_helpers.sh
+. "$(dirname "${BASH_SOURCE[0]}")/keychain_helpers.sh"
+
 : "${GODOT:?GODOT env var not set}"
 
 APP_NAME="${APP_NAME:-export}"
@@ -38,13 +41,15 @@ fi
 echo "✅ ios.zip present ($(stat -f%z "$TEMPLATES_DIR/ios.zip" 2>/dev/null || echo '?') bytes)"
 echo
 
-# Re-unlock the build keychain immediately before Godot runs — keychain
-# auto-lock would cause codesign to fail mid-export. We never touch the
-# *default* keychain (concurrent runners on this user account would
-# step on each other); the keychain is in the user search list from
-# configure_ios_signing.sh so Godot's internal codesign call finds it.
+# Re-establish keychain state under the cross-runner mutex. Godot's
+# iOS exporter shells out to codesign without --keychain, so it relies
+# entirely on the user's search list + default keychain to find the
+# cert — both of which are global per-user state on this multi-runner
+# host. keychain_assert_active unlocks, ensures the keychain is in the
+# search list, and pins it as default, all in one mutex'd critical
+# section so concurrent runners serialize that brief moment only.
 if [ -n "${KEYCHAIN_PATH:-}" ] && [ -n "${KEYCHAIN_PASSWORD:-}" ]; then
-    security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+    keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
 fi
 
 echo "::group::Godot --export-release"
