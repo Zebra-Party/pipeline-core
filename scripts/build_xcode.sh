@@ -115,7 +115,10 @@ SIGNING_ARGS=(
     DEVELOPMENT_TEAM="$TEAM_ID"
     # Explicit keychain path prevents errSecInternalComponent when codesign
     # runs as an xcodebuild subprocess and the default keychain has shifted.
-    OTHER_CODE_SIGN_FLAGS="--keychain ${KEYCHAIN_PATH}"
+    # -vvvv (verbose×4) makes codesign print its internal diagnostic on
+    # failure — without it we get only the bare "errSecInternalComponent"
+    # which is generic and unactionable.
+    OTHER_CODE_SIGN_FLAGS="--keychain ${KEYCHAIN_PATH} -vvvv"
 )
 [ -n "$PROFILE_UUID" ] && SIGNING_ARGS+=(PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID")
 
