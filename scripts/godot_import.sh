@@ -3,24 +3,27 @@
 # class_name globals register, and the filesystem scan finishes before
 # any export step runs.
 #
-# We use `--quit-after 60` rather than `--quit` because the iOS
-# exporter in 4.6 silently validates against the state of
+# We use `--quit-after <iterations>` rather than `--quit` because the
+# iOS exporter in 4.6 silently validates against the state of
 # `.godot/imported/`, and a bare `--quit` kills Godot before the scan
-# has time to land everything on disk. This matches the "prime" step
-# that works in another Godot 4.6 project shipping from CI.
+# has time to land everything on disk. The iteration counts have to
+# survive a fresh `.godot/` cache on the runner — projects with a few
+# hundred assets need ~10s on macOS. Override with $GODOT_IMPORT_FRAMES
+# if a project needs more.
 
 set -uo pipefail
 
 GODOT="${GODOT:?GODOT env var not set — call install_godot.sh first}"
+FRAMES="${GODOT_IMPORT_FRAMES:-1200}"
 
 LOG=/tmp/godot_import.log
 
-"$GODOT" --headless --editor --path . --quit-after 60 > "$LOG" 2>&1
+"$GODOT" --headless --editor --path . --quit-after "$FRAMES" > "$LOG" 2>&1
 status=$?
 
 if [ "$status" -eq 0 ] && grep -qiE "Could not find type|Identifier .* not declared|referenced non-existent resource" "$LOG"; then
 	echo "Import didn't fully settle on the first pass (ordering race), retrying once…"
-	"$GODOT" --headless --editor --path . --quit-after 60 > "$LOG" 2>&1
+	"$GODOT" --headless --editor --path . --quit-after "$FRAMES" > "$LOG" 2>&1
 	status=$?
 fi
 
