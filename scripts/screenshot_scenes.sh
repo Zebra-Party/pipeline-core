@@ -21,7 +21,17 @@ GODOT="${GODOT:?GODOT env var not set — call install_godot.sh first}"
 OUT_DIR="${OUT_DIR:-build/screenshots}"
 SCENE_GLOB="${SCENE_GLOB:-scenes/*.tscn}"
 
+# Screenshot capture relies on xvfb (Linux X virtual framebuffer) to give
+# Godot a GL context without a real display. macOS doesn't ship xvfb and
+# we don't have an equivalent offscreen pipeline wired up for the olympus
+# fleet — skip with a warning rather than failing the whole run. CI for
+# the boot smoke tests + headless tests still runs; only the PR
+# screenshot diff is missing.
 if ! command -v xvfb-run >/dev/null 2>&1; then
+	if [ "$(uname -s)" = "Darwin" ]; then
+		echo "::warning::xvfb-run not available on macOS runners — skipping screenshot capture"
+		exit 0
+	fi
 	echo "❌ xvfb-run not found on PATH — install xvfb on this runner" >&2
 	exit 1
 fi
