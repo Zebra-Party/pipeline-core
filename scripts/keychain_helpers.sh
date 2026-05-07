@@ -129,24 +129,36 @@ keychain_search_list_remove() {
 # so the chain validates locally.
 keychain_import_apple_intermediates() {
     local kc="${1:?keychain path required}"
-    local sys="/Library/Keychains/System.keychain"
+    local sysk="/Library/Keychains/System.keychain"
+    local rootk="/System/Library/Keychains/SystemRootCertificates.keychain"
     local tmp
     tmp=$(mktemp -d)
     local imported=0
-    local cert
-    for cert in "Apple Worldwide Developer Relations" \
-                "Developer ID Certification Authority" \
-                "Apple Application Integration"; do
-        local pem="$tmp/${cert// /_}.pem"
-        if security find-certificate -p -c "$cert" "$sys" >"$pem" 2>/dev/null \
+    # Pull every Apple-issued cert (intermediates + every Apple Root
+    # generation) so the chain Distribution → WWDR-of-some-generation →
+    # Apple-Root-of-some-generation always assembles inside this keychain.
+    # `-a -p` emits multiple PEMs concatenated; security import handles
+    # multi-cert PEM bundles fine.
+    local pair pattern src pem
+    for pair in \
+            "Apple Worldwide Developer Relations:$sysk" \
+            "Developer ID Certification Authority:$sysk" \
+            "Apple Application Integration:$sysk" \
+            "Apple Root CA:$rootk"; do
+        pattern="${pair%:*}"
+        src="${pair##*:}"
+        pem="$tmp/$(echo "$pattern" | tr ' /-' '___').pem"
+        if security find-certificate -a -p -c "$pattern" "$src" >"$pem" 2>/dev/null \
             && [ -s "$pem" ]; then
+            local count
+            count=$(grep -c 'BEGIN CERTIFICATE' "$pem" || echo 0)
             if security import "$pem" -k "$kc" -A 2>/dev/null; then
-                imported=$((imported + 1))
+                imported=$((imported + count))
             fi
         fi
     done
     rm -rf "$tmp"
-    echo "Imported $imported Apple intermediate certificates into $kc"
+    echo "Imported $imported Apple intermediate / root certificates into $kc"
 }
 
 # keychain_assert_active <keychain_path> <password>
