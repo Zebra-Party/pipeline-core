@@ -13,6 +13,9 @@
 
 set -euo pipefail
 
+# shellcheck source=keychain_helpers.sh
+. "$(dirname "${BASH_SOURCE[0]}")/keychain_helpers.sh"
+
 : "${GODOT:?GODOT env var not set}"
 : "${KEYCHAIN_PATH:?KEYCHAIN_PATH not set — call configure_macos_signing.sh first}"
 : "${MACOS_PROVISIONING_PROFILE_UUID:?MACOS_PROVISIONING_PROFILE_UUID not set}"
@@ -25,6 +28,13 @@ PKG_PATH="$BUILD_DIR/${APP_NAME}.pkg"
 PROFILE_PATH="$HOME/Library/MobileDevice/Provisioning Profiles/${MACOS_PROVISIONING_PROFILE_UUID}.provisionprofile"
 
 mkdir -p "$BUILD_DIR"
+
+# Pin our keychain as default + ensure it's in the search list under
+# the mutex; required because Godot's macOS export shells out to
+# codesign without --keychain and falls back to the user's default.
+if [ -n "${KEYCHAIN_PASSWORD:-}" ]; then
+    keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
+fi
 
 echo "::group::Godot --export-release"
 "$GODOT" --headless --path . --export-release "$MACOS_PRESET" "$APP_PATH"

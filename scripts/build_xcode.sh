@@ -26,6 +26,9 @@
 
 set -euo pipefail
 
+# shellcheck source=keychain_helpers.sh
+. "$(dirname "${BASH_SOURCE[0]}")/keychain_helpers.sh"
+
 : "${PLATFORM:?missing PLATFORM — set to ios, macos, or appletvos}"
 : "${APP_NAME:?missing APP_NAME}"
 : "${KEYCHAIN_PATH:?missing KEYCHAIN_PATH — call configure_xcode_signing.sh first}"
@@ -64,12 +67,14 @@ else
     exit 1
 fi
 
-# Re-unlock and re-assert partition ACLs before xcodebuild. We never
-# touch the default keychain or the search list here — xcodebuild's
-# codesign subprocess gets the keychain via OTHER_CODE_SIGN_FLAGS below,
-# so global state mutations would only race with other concurrent
-# runners on this machine without buying anything.
-security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+# Re-unlock + re-assert partition ACLs + (under the cross-runner mutex)
+# default-keychain and search-list. xcodebuild's archive step has Xcode
+# code paths that ignore OTHER_CODE_SIGN_FLAGS=--keychain (notably the
+# entitlement-DER step) and fall back to the user's default keychain —
+# without this assertion they trip errSecInternalComponent on multi-
+# runner setups where another job has just set the default to its own
+# (now-deleted) build keychain.
+keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
 PARTITION_LIST="apple-tool:,apple:,codesign:"
 [ "$PLATFORM" = "macos" ] && PARTITION_LIST="${PARTITION_LIST},productbuild:"
 security set-key-partition-list -S "$PARTITION_LIST" \

@@ -11,11 +11,14 @@
 #   2. Search-list mutations are wrapped in a per-user mkdir mutex so
 #      concurrent rewrites serialise. (`flock(1)` is not on macOS;
 #      mkdir is atomic on POSIX and needs no extra tooling.)
-#   3. Nothing here ever touches the *default* keychain — that's a
-#      single-slot piece of global state. xcodebuild gets the keychain
-#      via OTHER_CODE_SIGN_FLAGS=--keychain, direct codesign /
-#      productbuild calls pass --keychain explicitly. Godot's iOS
-#      exporter finds the cert via the search list.
+#   3. The *default* keychain is a single-slot piece of global state.
+#      We do still set it (some code paths inside Xcode reach for the
+#      default even when we pass --keychain explicitly — empirically
+#      that's what trips errSecInternalComponent in xcodebuild's archive
+#      step on multi-runner setups). It's set under the same mutex,
+#      and we don't bother resetting it on cleanup — whichever runner
+#      finishes last leaves their (now-deleted) keychain referenced as
+#      default until the next signing job runs and re-asserts.
 
 set -euo pipefail
 
@@ -113,6 +116,36 @@ keychain_search_list_remove() {
     } || rc=$?
     _keychain_release_lock
     return $rc
+}
+
+# keychain_assert_active <keychain_path> <password>
+# Brief critical section that re-establishes the build keychain as
+# usable for the next xcodebuild step:
+#   - unlocks it (must be done before the partition list is queried)
+#   - ensures it's on the user's search list
+#   - sets it as the user's default keychain
+#
+# The default-keychain mutation is global, so concurrent runners race
+# on it — but the actual signing calls all pass --keychain explicitly,
+# so the default-keychain set is purely a fallback for legacy code
+# paths inside Xcode that ignore --keychain (which is what historically
+# triggered errSecInternalComponent on this codebase).
+keychain_assert_active() {
+    local kc="${1:?keychain path required}"
+    local pw="${2:?keychain password required}"
+    security unlock-keychain -p "$pw" "$kc"
+    _keychain_acquire_lock
+    {
+        local existing
+        existing=$(security list-keychains -d user 2>/dev/null \
+            | tr -d '"' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
+        if ! printf '%s\n' "$existing" | grep -qxF "$kc"; then
+            # shellcheck disable=SC2086  # word-split is intentional
+            security list-keychains -d user -s "$kc" $existing 2>/dev/null || true
+        fi
+        security default-keychain -s "$kc" 2>/dev/null || true
+    } || true
+    _keychain_release_lock
 }
 
 # keychain_destroy <keychain_path>
