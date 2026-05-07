@@ -52,6 +52,12 @@ if [ -n "${KEYCHAIN_PATH:-}" ] && [ -n "${KEYCHAIN_PASSWORD:-}" ]; then
     keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
 fi
 
+# Hold the host-wide codesign lock across the export. The default
+# keychain is single-slot global state; without this, a sibling runner
+# that calls keychain_assert_active mid-export will set its own keychain
+# as default and our codesign returns errSecInternalComponent.
+keychain_codesign_lock_acquire
+
 echo "::group::Godot --export-release"
 "$GODOT" --headless --path . --export-release "iOS" "$IPA_PATH"
 echo "::endgroup::"

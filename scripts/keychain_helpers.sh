@@ -28,6 +28,14 @@ set -euo pipefail
 _KEYCHAIN_LOCK_DIR="/tmp/zebra-keychain-search-list.${USER:-$(whoami)}.lock.d"
 _KEYCHAIN_LOCK_TIMEOUT_TENTHS=600 # 60 seconds
 
+# Host-wide codesign lock — prevents two concurrent runners from
+# trampling each other's `security default-keychain -s` mid-build.
+# Held for the duration of one build's signing window (assertion +
+# Godot/xcodebuild export). Uses shlock(1) (BSD/macOS, atomic via
+# link(2), PID-aware so a hard-killed prior build doesn't deadlock
+# the next one).
+_KEYCHAIN_CODESIGN_LOCK="/tmp/zebra-codesign.${USER:-$(whoami)}.lock"
+
 _keychain_acquire_lock() {
     local i=0
     while ! mkdir "$_KEYCHAIN_LOCK_DIR" 2>/dev/null; do
@@ -192,6 +200,36 @@ keychain_assert_active() {
         security default-keychain -s "$kc" 2>/dev/null || true
     } || true
     _keychain_release_lock
+}
+
+# keychain_codesign_lock_acquire
+# Block until this build holds the host-wide codesign lock, then
+# install an EXIT trap that releases it. Call this AFTER
+# keychain_assert_active and BEFORE any signing operation
+# (Godot --export-release, xcodebuild archive, codesign, productbuild).
+# Sibling runners will queue up here so only one is in the
+# "default-keychain points at me" + "codesign running" window at a time.
+#
+# Override timeout via KEYCHAIN_CODESIGN_LOCK_TIMEOUT (seconds, default 1200).
+keychain_codesign_lock_acquire() {
+    local timeout="${KEYCHAIN_CODESIGN_LOCK_TIMEOUT:-1200}"
+    local deadline=$((SECONDS + timeout))
+    echo "Acquiring codesign lock at $_KEYCHAIN_CODESIGN_LOCK..."
+    until shlock -p $$ -f "$_KEYCHAIN_CODESIGN_LOCK" 2>/dev/null; do
+        if [ "$SECONDS" -ge "$deadline" ]; then
+            echo "::error::Failed to acquire codesign lock within ${timeout}s — is another build hung?"
+            exit 1
+        fi
+        sleep 2
+    done
+    # Use a function-level trap so callers don't have to remember to
+    # release. If the caller already has its own EXIT trap, append.
+    trap 'keychain_codesign_lock_release' EXIT
+    echo "Codesign lock acquired (held until script exit)."
+}
+
+keychain_codesign_lock_release() {
+    rm -f "$_KEYCHAIN_CODESIGN_LOCK"
 }
 
 # keychain_destroy <keychain_path>

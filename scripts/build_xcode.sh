@@ -81,6 +81,14 @@ security set-key-partition-list -S "$PARTITION_LIST" \
     -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
+# Hold the host-wide codesign lock across archive + exportArchive.
+# xcodebuild has Xcode subroutines (entitlement DER, productbuild) that
+# ignore OTHER_CODE_SIGN_FLAGS=--keychain and reach for the user's
+# default keychain — which is shared across all runners on this user.
+# Without this serialisation a sibling job's keychain_assert_active
+# clobbers our default mid-archive and we trip errSecInternalComponent.
+keychain_codesign_lock_acquire
+
 VERSION_ARGS=()
 [ -n "${VERSION:-}" ] && VERSION_ARGS+=(MARKETING_VERSION="$VERSION")
 [ -n "${BUILD:-}"   ] && VERSION_ARGS+=(CURRENT_PROJECT_VERSION="$BUILD")

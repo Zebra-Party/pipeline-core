@@ -36,6 +36,12 @@ if [ -n "${KEYCHAIN_PASSWORD:-}" ]; then
     keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
 fi
 
+# Hold the host-wide codesign lock across export + re-sign + productbuild.
+# The default keychain is single-slot global state shared across all
+# runners on this user; without serialisation a sibling runner can
+# repoint default mid-build and our codesign trips errSecInternalComponent.
+keychain_codesign_lock_acquire
+
 echo "::group::Godot --export-release"
 "$GODOT" --headless --path . --export-release "$MACOS_PRESET" "$APP_PATH"
 echo "::endgroup::"
