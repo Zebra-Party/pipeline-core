@@ -154,18 +154,35 @@ SIGNING_ARGS=(
 )
 [ -n "$PROFILE_UUID" ] && SIGNING_ARGS+=(PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID")
 
-echo "::group::xcodebuild archive (${PLATFORM})"
 ARCHIVE_RC=0
-# shellcheck disable=SC2086  # PROJECT_FLAG is intentionally word-split
-xcodebuild archive \
-    $PROJECT_FLAG \
-    -scheme "$SCHEME" \
-    -destination "$DESTINATION" \
-    -configuration Release \
-    -archivePath "$ARCHIVE_PATH" \
-    "${SIGNING_ARGS[@]}" \
-    "${VERSION_ARGS[@]}" || ARCHIVE_RC=$?
-echo "::endgroup::"
+for archive_attempt in 1 2; do
+    echo "::group::xcodebuild archive (${PLATFORM}) — attempt ${archive_attempt}/2"
+    ARCHIVE_RC=0
+    # shellcheck disable=SC2086  # PROJECT_FLAG is intentionally word-split
+    xcodebuild archive \
+        $PROJECT_FLAG \
+        -scheme "$SCHEME" \
+        -destination "$DESTINATION" \
+        -configuration Release \
+        -archivePath "$ARCHIVE_PATH" \
+        "${SIGNING_ARGS[@]}" \
+        "${VERSION_ARGS[@]}" || ARCHIVE_RC=$?
+    echo "::endgroup::"
+    [ "$ARCHIVE_RC" -eq 0 ] && break
+    if [ "$archive_attempt" -lt 2 ]; then
+        # codesign --generate-entitlement-der occasionally returns
+        # errSecInternalComponent — empirically intermittent (one job
+        # of three fails, another build of the same git SHA succeeds).
+        # The most plausible cause is a transient hiccup in the Apple
+        # Security framework's cert / chain validation network calls
+        # done during DER encoding. Sleep + retry once before declaring
+        # failure; clean derived data so the second archive doesn't
+        # short-circuit to the same broken state.
+        echo "::warning::xcodebuild archive failed (rc=$ARCHIVE_RC) — sleeping 15s and retrying once"
+        rm -rf "$ARCHIVE_PATH"
+        sleep 15
+    fi
+done
 
 # On failure, dump the .xcent (xcodebuild-generated entitlements) and the
 # provisioning profile's Entitlements dict so a mismatch between the two
