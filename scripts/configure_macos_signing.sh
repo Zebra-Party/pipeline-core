@@ -44,10 +44,10 @@ security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -f pkcs12 -k "$
 security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
 	-s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-# Godot's macOS export reads identities from the user's search list. Add
-# under the per-machine mutex so concurrent runners don't race. Never
-# touch the *default* keychain.
-keychain_search_list_add "$KEYCHAIN_PATH"
+# Godot's macOS export reads identities from the user's search list, and
+# `security cms -D` below needs a default keychain to validate the
+# profile signature. keychain_assert_active does both under the mutex.
+keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
 
 security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
