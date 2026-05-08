@@ -69,7 +69,18 @@ IDENTITY=$(security find-identity -p codesigning "$KEYCHAIN_PATH" \
 	| grep "Apple Distribution" | head -1 | sed 's/.*"\(.*\)".*/\1/')
 [ -n "$IDENTITY" ] || { echo "::error::Apple Distribution identity not in $KEYCHAIN_PATH"; exit 1; }
 xattr -cr "$APP_PATH"
-codesign --force --options runtime --timestamp --keychain "$KEYCHAIN_PATH" \
+# No --keychain here. With --keychain, codesign restricts chain
+# assembly to that keychain alone — and our per-job build keychain
+# has Apple Root imported only as a regular cert, not as a trust
+# anchor, so codesign reports "unable to build chain to self-signed
+# root" / errSecInternalComponent. Without --keychain, codesign
+# falls back to the user search list (build_kc + login.keychain,
+# both pinned by keychain_activate) plus the host's
+# SystemRootCertificates.keychain where Apple Root is a real trust
+# anchor. The signing identity is found via the search list since
+# the build keychain is on it. Godot's own codesign step in the
+# preceding export does exactly this.
+codesign --force --options runtime --timestamp \
 	--sign "$IDENTITY" "$APP_PATH"
 echo "Re-signed: $IDENTITY"
 
@@ -79,8 +90,10 @@ INSTALLER_IDENTITY=$(security find-identity "$KEYCHAIN_PATH" \
 	| head -1 | sed 's/.*"\(.*\)".*/\1/' || true)
 
 if [ -n "$INSTALLER_IDENTITY" ]; then
+	# See note above codesign re: --keychain — same applies to productbuild's
+	# chain assembly for the installer identity.
 	productbuild --component "$APP_PATH" /Applications \
-		--sign "$INSTALLER_IDENTITY" --keychain "$KEYCHAIN_PATH" "$PKG_PATH"
+		--sign "$INSTALLER_IDENTITY" "$PKG_PATH"
 	echo "Signed .pkg: $PKG_PATH"
 else
 	echo "::warning::No installer cert — producing unsigned .pkg (TestFlight upload will fail without it)"
