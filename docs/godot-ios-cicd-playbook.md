@@ -49,7 +49,7 @@ Before you ever push a CI build, work through these in order. Most of the time s
 
 - [ ] Xcode installed (any reasonably recent version; `pipeline-core/scripts/select_xcode.sh` picks the newest `Xcode*.app` automatically).
 - [ ] Runner registered with labels matching the `runs-on` in your release workflow (this org uses `[self-hosted, macOS, olympus]`).
-- [ ] One runner per macOS user account — sharing a user account between runners means sharing the keychain search list and default-keychain slot, which races during signing. The Zebra-Party setup uses `scripts/setup_runner_account.sh` from the workspace repo; see that repo's README for host requirements and the add/remove flow.
+- [ ] One runner per macOS user account — sharing a user account between runners means sharing the keychain search list and default-keychain slot, which races during signing. The Zebra-Party setup uses `scripts/ci/setup_action_runners.sh` in the workspace repo; see that repo's `docs/ci.md` for host requirements and the add/remove flow.
 - [ ] First run of pipeline-core's `install_godot.sh` (invoked by the reusable `ios-release.yml` workflow) will fetch Godot + the iOS export template; cache it under `RUNNER_TOOL_CACHE` so subsequent runs are fast.
 - [ ] If Godot.app gets quarantined by macOS Gatekeeper, `xattr -dr com.apple.quarantine /path/to/Godot.app`.
 
