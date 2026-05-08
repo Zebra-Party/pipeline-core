@@ -11,12 +11,13 @@ set -euo pipefail
 
 GODOT="${GODOT:?GODOT env var not set — call install_godot.sh first}"
 SCENE_DIR="${SCENE_DIR:-scenes}"
+TMP_DIR="${RUNNER_TEMP:-/tmp}"
 
 failures=0
 while IFS= read -r scene; do
 	name="$(basename "$scene" .tscn)"
 	echo "::group::Boot $name"
-	output_file="/tmp/boot_${name}.log"
+	output_file="$TMP_DIR/boot_${name}.log"
 	"$GODOT" --headless --quit-after 60 "res://$scene" > "$output_file" 2>&1 || true
 	# Strip known-benign headless noise. Under --headless on macOS, Godot's
 	# FontFile.load() emits FreeType + _ensure_cache_for_size errors and

@@ -16,7 +16,7 @@ set -uo pipefail
 GODOT="${GODOT:?GODOT env var not set — call install_godot.sh first}"
 FRAMES="${GODOT_IMPORT_FRAMES:-1200}"
 
-LOG=/tmp/godot_import.log
+LOG="${RUNNER_TEMP:-/tmp}/godot_import.log"
 
 "$GODOT" --headless --editor --path . --quit-after "$FRAMES" > "$LOG" 2>&1
 status=$?

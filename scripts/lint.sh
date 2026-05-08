@@ -31,15 +31,20 @@ fi
 GDFORMAT="$(command -v gdformat)"
 GDLINT="$(command -v gdlint)"
 
+# Write captured output under $RUNNER_TEMP (per-job, auto-cleaned by
+# the runner) so two runners on the same host with different user
+# accounts don't collide on a shared /tmp file.
+TMP_DIR="${RUNNER_TEMP:-/tmp}"
+
 # shellcheck disable=SC2086
 echo "::group::gdformat (check)"
-"$GDFORMAT" --check $LINT_DIRS 2>&1 | tee /tmp/gdformat.out
+"$GDFORMAT" --check $LINT_DIRS 2>&1 | tee "$TMP_DIR/gdformat.out"
 gdformat_status=${PIPESTATUS[0]}
 echo "::endgroup::"
 
 # shellcheck disable=SC2086
 echo "::group::gdlint"
-"$GDLINT" $LINT_DIRS 2>&1 | tee /tmp/gdlint.out
+"$GDLINT" $LINT_DIRS 2>&1 | tee "$TMP_DIR/gdlint.out"
 gdlint_status=${PIPESTATUS[0]}
 echo "::endgroup::"
 

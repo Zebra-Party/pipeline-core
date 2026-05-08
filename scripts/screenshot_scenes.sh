@@ -74,7 +74,7 @@ for scene in $SCENE_GLOB; do
 	for entry in "${DEVICES[@]}"; do
 		IFS=":" read -r device width height <<< "$entry"
 		out_path="$OUT_DIR/$device/$scene_name.png"
-		log_path="/tmp/screenshot_${device}_${scene_name}.log"
+		log_path="${RUNNER_TEMP:-/tmp}/screenshot_${device}_${scene_name}.log"
 		mkdir -p "$(dirname "$out_path")"
 
 		echo "::group::Screenshot $scene_name @ $device (${width}x${height})"
