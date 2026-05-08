@@ -116,12 +116,13 @@ jobs:
           fi
           bash .pipeline-core/scripts/upload_ios.sh
 
-      - name: Clean up keychain
-        if: always() && env.KEYCHAIN_PATH != ''
+      - name: Clean up signing artefacts
+        if: always()
         run: |
           # shellcheck source=/dev/null
           . .pipeline-core/scripts/keychain_helpers.sh
-          keychain_destroy "$KEYCHAIN_PATH"
+          keychain_destroy "${KEYCHAIN_PATH:-}"
+          rm -f "${INSTALLED_PROVISIONING_PROFILE:-}"
 
       - name: Restore export_presets.cfg
         if: always()

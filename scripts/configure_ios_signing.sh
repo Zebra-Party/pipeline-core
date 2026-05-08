@@ -24,8 +24,6 @@ set -euo pipefail
 : "${APPLE_IOS_DISTRIBUTION_PROVISION:?missing}"
 
 WORK_DIR="$(mktemp -d)"
-# Per-job keychain so 5 olympus runners on the same user account never
-# fight over a single file or its search-list entry.
 KEYCHAIN_PATH="$(keychain_unique_path build-godot-ios)"
 KEYCHAIN_PASSWORD="$(uuidgen)"
 P12_PATH="$WORK_DIR/cert.p12"
@@ -40,12 +38,6 @@ security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 # Idle timeout but no -l so the keychain doesn't lock on system sleep.
 security set-keychain-settings -t 21600 -u "$KEYCHAIN_PATH"
 security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-# Godot's iOS exporter calls codesign internally without --keychain, so
-# we need this keychain on the user's search list to be discoverable.
-# Mutex the read-modify-write so 5 concurrent runners on the same user
-# don't trample each other. (build_ios.sh's keychain_assert_active also
-# pins this as the default keychain just before the export step.)
-keychain_search_list_add "$KEYCHAIN_PATH"
 
 # -A + -T: allow all apps + explicitly trust the codesign / security /
 # xcodebuild binaries. Belt + braces against errSecInternalComponent
@@ -59,9 +51,10 @@ security set-key-partition-list -S "apple-tool:,apple:,codesign:" -s -k "$KEYCHA
 # default below) can validate the trust chain locally.
 keychain_import_apple_intermediates "$KEYCHAIN_PATH"
 
-# Pin as the user's default keychain (mutex'd) before `security cms -D`
-# below — it needs a default keychain to validate the profile signature.
-keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
+# Place the keychain on the user search list and as the user's default
+# keychain so `security cms -D` below (which validates the profile
+# signature against the default keychain) finds it.
+keychain_activate "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
 
 # 3. Install the provisioning profile + extract its identifiers so we
 #    can compare them against the bundle id in export_presets.cfg.
@@ -76,7 +69,8 @@ PRESET_BUNDLE_ID="$(grep -E '^application/bundle_identifier=' export_presets.cfg
 
 PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
 mkdir -p "$PROFILE_DIR"
-cp "$PROFILE_PATH" "$PROFILE_DIR/${PROFILE_UUID}.mobileprovision"
+INSTALLED_PROFILE="$PROFILE_DIR/${PROFILE_UUID}.mobileprovision"
+cp "$PROFILE_PATH" "$INSTALLED_PROFILE"
 
 # Always-visible diagnostics — no ::group:: wrapper because GitHub
 # collapses groups by default and the iOS export error message is
@@ -120,5 +114,6 @@ if [ -n "${GITHUB_ENV:-}" ]; then
 		echo "IOS_PROVISIONING_PROFILE_NAME=$PROFILE_NAME"
 		echo "KEYCHAIN_PATH=$KEYCHAIN_PATH"
 		echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD"
+		echo "INSTALLED_PROVISIONING_PROFILE=$INSTALLED_PROFILE"
 	} >> "$GITHUB_ENV"
 fi

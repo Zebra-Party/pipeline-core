@@ -35,8 +35,6 @@ set -euo pipefail
 : "${PLATFORM:?missing PLATFORM — set to ios, macos, or appletvos}"
 
 WORK_DIR="${RUNNER_TEMP:-$(mktemp -d)}"
-# Per-job keychain path so concurrent runners on the same user account
-# don't share or fight over a single file. See keychain_helpers.sh.
 KEYCHAIN_PATH="$(keychain_unique_path "build-${PLATFORM}")"
 echo "Runner: ${RUNNER_NAME:-$(hostname)}, user: $(whoami), WORK_DIR=$WORK_DIR, KEYCHAIN=$KEYCHAIN_PATH"
 KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
@@ -65,10 +63,6 @@ security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 # doesn't lock on system sleep mid-build.
 security set-keychain-settings -t 21600 -u "$KEYCHAIN_PATH"
 security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-# Add to the user's search list under the cross-runner mutex; the default
-# keychain is set later in build_xcode.sh's keychain_assert_active call,
-# also under the mutex.
-keychain_search_list_add "$KEYCHAIN_PATH"
 # -A: allow all apps to access the key without prompting.
 # -T <path>: also explicitly trust those binaries even with -A.
 # Belt + braces — Xcode's archive path spawns helpers like swiftStdLibTool
@@ -85,13 +79,12 @@ security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
 # resolves locally and we don't get errSecInternalComponent.
 keychain_import_apple_intermediates "$KEYCHAIN_PATH"
 
-# Pin our keychain as the user's default before `security cms -D` runs
-# below — it walks the user's default keychain to validate the profile
-# signature and errors with "A default keychain could not be found"
-# if there isn't one. Mutex-protected so 5 olympus runners serialize
-# this brief global-state mutation; build_xcode.sh re-asserts it later
-# right before xcodebuild.
-keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
+# Place on the search list and pin as the user's default before
+# `security cms -D` runs below — it walks the user's default keychain
+# to validate the profile signature and errors with "A default keychain
+# could not be found" if there isn't one. build_xcode.sh re-asserts
+# this right before xcodebuild as a defensive unlock.
+keychain_activate "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
 
 # macOS: optionally import the Mac Installer Distribution cert for signed .pkg.
 if [ "$PLATFORM" = "macos" ] && [ -n "${APPLE_MAC_INSTALLER_P12_BASE64:-}" ]; then
@@ -132,7 +125,8 @@ fi
 # Install the profile so Xcode can find it.
 PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
 mkdir -p "$PROFILE_DIR"
-cp "$PROFILE_PATH" "$PROFILE_DIR/${PROFILE_UUID}.${PROFILE_EXT}"
+INSTALLED_PROFILE="$PROFILE_DIR/${PROFILE_UUID}.${PROFILE_EXT}"
+cp "$PROFILE_PATH" "$INSTALLED_PROFILE"
 
 echo "${PLATFORM} signing config:"
 echo "  Profile : $PROFILE_NAME ($PROFILE_UUID)"
@@ -194,5 +188,6 @@ if [ -n "${GITHUB_ENV:-}" ]; then
         echo "TEAM_ID=${TEAM_ID}"
         echo "PROVISIONING_PROFILE_UUID_${PLATFORM_UPPER}=${PROFILE_UUID}"
         echo "EXPORT_OPTIONS_PATH_${PLATFORM_UPPER}=${EXPORT_OPTIONS_PATH}"
+        echo "INSTALLED_PROVISIONING_PROFILE=${INSTALLED_PROFILE}"
     } >> "$GITHUB_ENV"
 fi

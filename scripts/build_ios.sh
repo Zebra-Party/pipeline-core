@@ -41,22 +41,14 @@ fi
 echo "✅ ios.zip present ($(stat -f%z "$TEMPLATES_DIR/ios.zip" 2>/dev/null || echo '?') bytes)"
 echo
 
-# Re-establish keychain state under the cross-runner mutex. Godot's
-# iOS exporter shells out to codesign without --keychain, so it relies
-# entirely on the user's search list + default keychain to find the
-# cert — both of which are global per-user state on this multi-runner
-# host. keychain_assert_active unlocks, ensures the keychain is in the
-# search list, and pins it as default, all in one mutex'd critical
-# section so concurrent runners serialize that brief moment only.
+# Defensive re-unlock + re-assert default + search list. configure_ios_signing.sh
+# already did this; we redo it in case the keychain idle-timed-out between
+# steps. Godot's iOS exporter shells out to codesign without --keychain,
+# so it relies on the user's search list + default keychain to find the
+# cert.
 if [ -n "${KEYCHAIN_PATH:-}" ] && [ -n "${KEYCHAIN_PASSWORD:-}" ]; then
-    keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
+    keychain_activate "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
 fi
-
-# Hold the host-wide codesign lock across the export. The default
-# keychain is single-slot global state; without this, a sibling runner
-# that calls keychain_assert_active mid-export will set its own keychain
-# as default and our codesign returns errSecInternalComponent.
-keychain_codesign_lock_acquire
 
 echo "::group::Godot --export-release"
 "$GODOT" --headless --path . --export-release "iOS" "$IPA_PATH"

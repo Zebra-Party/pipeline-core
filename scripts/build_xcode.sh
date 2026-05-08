@@ -67,27 +67,16 @@ else
     exit 1
 fi
 
-# Re-unlock + re-assert partition ACLs + (under the cross-runner mutex)
-# default-keychain and search-list. xcodebuild's archive step has Xcode
-# code paths that ignore OTHER_CODE_SIGN_FLAGS=--keychain (notably the
-# entitlement-DER step) and fall back to the user's default keychain —
-# without this assertion they trip errSecInternalComponent on multi-
-# runner setups where another job has just set the default to its own
-# (now-deleted) build keychain.
-keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
+# Defensive re-unlock + re-assert default + search list. xcodebuild's
+# archive step has Xcode code paths that ignore
+# OTHER_CODE_SIGN_FLAGS=--keychain (notably the entitlement-DER step)
+# and fall back to the user's default keychain.
+keychain_activate "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
 PARTITION_LIST="apple-tool:,apple:,codesign:"
 [ "$PLATFORM" = "macos" ] && PARTITION_LIST="${PARTITION_LIST},productbuild:"
 security set-key-partition-list -S "$PARTITION_LIST" \
     -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 security find-identity -v -p codesigning "$KEYCHAIN_PATH"
-
-# Hold the host-wide codesign lock across archive + exportArchive.
-# xcodebuild has Xcode subroutines (entitlement DER, productbuild) that
-# ignore OTHER_CODE_SIGN_FLAGS=--keychain and reach for the user's
-# default keychain — which is shared across all runners on this user.
-# Without this serialisation a sibling job's keychain_assert_active
-# clobbers our default mid-archive and we trip errSecInternalComponent.
-keychain_codesign_lock_acquire
 
 VERSION_ARGS=()
 [ -n "${VERSION:-}" ] && VERSION_ARGS+=(MARKETING_VERSION="$VERSION")
@@ -97,8 +86,8 @@ SIGNING_ARGS=(
     CODE_SIGN_STYLE=Manual
     CODE_SIGN_IDENTITY="Apple Distribution"
     DEVELOPMENT_TEAM="$TEAM_ID"
-    # Explicit keychain path prevents errSecInternalComponent when codesign
-    # runs as an xcodebuild subprocess and the default keychain has shifted.
+    # Explicit keychain path so codesign doesn't depend on the search
+    # list when invoked as an xcodebuild subprocess.
     OTHER_CODE_SIGN_FLAGS="--keychain ${KEYCHAIN_PATH}"
 )
 [ -n "$PROFILE_UUID" ] && SIGNING_ARGS+=(PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID")

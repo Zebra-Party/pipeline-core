@@ -50,8 +50,8 @@ keychain_import_apple_intermediates "$KEYCHAIN_PATH"
 
 # Godot's macOS export reads identities from the user's search list, and
 # `security cms -D` below needs a default keychain to validate the
-# profile signature. keychain_assert_active does both under the mutex.
-keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
+# profile signature.
+keychain_activate "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
 
 security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
@@ -72,8 +72,10 @@ PLIST="$(security cms -D -i "$PROFILE_PATH")"
 PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< "$PLIST")
 TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print TeamIdentifier:0" /dev/stdin <<< "$PLIST")
 
-mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/${PROFILE_UUID}.provisionprofile"
+PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+mkdir -p "$PROFILE_DIR"
+INSTALLED_PROFILE="$PROFILE_DIR/${PROFILE_UUID}.provisionprofile"
+cp "$PROFILE_PATH" "$INSTALLED_PROFILE"
 
 echo "macOS signing config:"
 echo "  Team ID              : $TEAM_ID"
@@ -95,5 +97,6 @@ if [ -n "${GITHUB_ENV:-}" ]; then
 		echo "MACOS_PROVISIONING_PROFILE_UUID=$PROFILE_UUID"
 		echo "KEYCHAIN_PATH=$KEYCHAIN_PATH"
 		echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD"
+		echo "INSTALLED_PROVISIONING_PROFILE=$INSTALLED_PROFILE"
 	} >> "$GITHUB_ENV"
 fi

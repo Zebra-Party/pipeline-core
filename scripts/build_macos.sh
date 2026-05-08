@@ -29,18 +29,12 @@ PROFILE_PATH="$HOME/Library/MobileDevice/Provisioning Profiles/${MACOS_PROVISION
 
 mkdir -p "$BUILD_DIR"
 
-# Pin our keychain as default + ensure it's in the search list under
-# the mutex; required because Godot's macOS export shells out to
-# codesign without --keychain and falls back to the user's default.
+# Defensive re-activate; required because Godot's macOS export shells
+# out to codesign without --keychain and falls back to the user's
+# search list + default keychain.
 if [ -n "${KEYCHAIN_PASSWORD:-}" ]; then
-    keychain_assert_active "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
+    keychain_activate "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
 fi
-
-# Hold the host-wide codesign lock across export + re-sign + productbuild.
-# The default keychain is single-slot global state shared across all
-# runners on this user; without serialisation a sibling runner can
-# repoint default mid-build and our codesign trips errSecInternalComponent.
-keychain_codesign_lock_acquire
 
 echo "::group::Godot --export-release"
 "$GODOT" --headless --path . --export-release "$MACOS_PRESET" "$APP_PATH"
@@ -61,8 +55,7 @@ fi
 echo "Built .app: $APP_PATH"
 
 # Embed provisioning profile + re-sign. Pass --keychain explicitly so
-# codesign / productbuild aren't reliant on the search list at signing
-# time (5 olympus runners modify it concurrently).
+# codesign / productbuild don't depend on the search list at signing time.
 cp "$PROFILE_PATH" "$APP_PATH/Contents/embedded.provisionprofile"
 IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
 	| grep "Apple Distribution" | head -1 | sed 's/.*"\(.*\)".*/\1/')
