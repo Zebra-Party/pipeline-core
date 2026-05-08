@@ -3,14 +3,13 @@
 # a signed IPA directly when application/export_project_only=false.
 #
 # Env (required):
-#   GODOT          — set by install_godot.sh
-#   KEYCHAIN_PATH  — set by configure_ios_signing.sh
-#   GODOT_VERSION  — set by install_godot.sh
+#   GODOT        — set by install_godot.sh
+#   KEYCHAIN_PATH — set by configure_ios_signing.sh
+#   GODOT_VERSION — set by install_godot.sh
 #
 # Env (optional):
-#   APP_NAME       — base filename for the IPA, no extension (default: "export")
-#   BUILD_DIR      — output directory (default: "build/ios")
-#   KEYCHAIN_PASSWORD — set by configure_ios_signing.sh; used for defensive unlock
+#   APP_NAME     — base filename for the IPA, no extension (default: "export")
+#   BUILD_DIR    — output directory (default: "build/ios")
 
 set -euo pipefail
 
@@ -29,6 +28,10 @@ mkdir -p "$BUILD_DIR"
 echo "Xcode / signing environment:"
 echo "  xcode-select: $(xcode-select -p 2>&1 || true)"
 xcodebuild -version 2>&1 | sed 's/^/  /' || true
+echo
+echo "Codesigning identities:"
+security find-identity -v -p codesigning "${KEYCHAIN_PATH:-}" 2>&1 | sed 's/^/  /' || true
+echo
 
 TEMPLATES_DIR="$HOME/Library/Application Support/Godot/export_templates/${GODOT_VERSION/-stable/.stable}"
 if [ ! -f "$TEMPLATES_DIR/ios.zip" ]; then
@@ -36,28 +39,16 @@ if [ ! -f "$TEMPLATES_DIR/ios.zip" ]; then
 	exit 1
 fi
 echo "✅ ios.zip present ($(stat -f%z "$TEMPLATES_DIR/ios.zip" 2>/dev/null || echo '?') bytes)"
+echo
 
-# Hold the host-wide codesign lock + isolate the search list so Godot's
-# internal codesign (which runs without --keychain) finds only this
-# runner's identity. Sibling runners' persistent keychains all hold the
-# same Apple Distribution cert; without isolation, identity lookup is
-# non-deterministic.
-keychain_codesign_lock_acquire
-[ -n "${KEYCHAIN_PATH:-}" ] && keychain_search_list_isolate "$KEYCHAIN_PATH"
-
-# Defensive unlock + pin as default keychain. Godot's exporter calls
-# codesign without --keychain, so it relies on the user's search list +
-# default keychain. Both are now constrained to our keychain.
+# Defensive re-unlock + re-assert default + search list. configure_ios_signing.sh
+# already did this; we redo it in case the keychain idle-timed-out between
+# steps. Godot's iOS exporter shells out to codesign without --keychain,
+# so it relies on the user's search list + default keychain to find the
+# cert.
 if [ -n "${KEYCHAIN_PATH:-}" ] && [ -n "${KEYCHAIN_PASSWORD:-}" ]; then
-    security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" 2>/dev/null || true
-    security default-keychain -s "$KEYCHAIN_PATH"
+    keychain_activate "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
 fi
-
-echo "::group::Keychain state under codesign lock"
-security default-keychain -d user || true
-security list-keychains   -d user || true
-security find-identity -v -p codesigning "${KEYCHAIN_PATH:-}" || true
-echo "::endgroup::"
 
 echo "::group::Godot --export-release"
 "$GODOT" --headless --path . --export-release "iOS" "$IPA_PATH"

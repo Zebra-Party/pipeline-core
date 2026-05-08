@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Sets up Apple Distribution + Mac Installer signing for Godot macOS builds.
-# Ensures the per-runner persistent keychain has the current cert(s) (lazy
-# build via setup_runner_keychain), installs the provisioning profile, and
-# patches export_presets.cfg.
+# Sets up Apple Distribution signing for macOS builds.
+# Imports the distribution cert + optionally the Mac Installer cert,
+# installs the provisioning profile, and patches export_presets.cfg.
 #
 # Required env vars:
 #   APPLE_CERTIFICATE_P12_BASE64         — base64 distribution .p12
@@ -28,18 +27,44 @@ set -euo pipefail
 : "${APPLE_MACOS_DISTRIBUTION_PROVISION:?missing}"
 
 WORK_DIR="${RUNNER_TEMP:-$(mktemp -d)}"
+KEYCHAIN_PATH="$(keychain_unique_path build-godot-macos)"
+KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
+CERT_PATH="$WORK_DIR/certificate.p12"
 PROFILE_PATH="$WORK_DIR/profile.provisionprofile"
+
+echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERT_PATH"
 echo "$APPLE_MACOS_DISTRIBUTION_PROVISION" | base64 --decode > "$PROFILE_PATH"
 
-# Build / refresh the runner's persistent keychain. setup_runner_keychain
-# picks up APPLE_MAC_INSTALLER_P12_BASE64 when set and adds the installer
-# cert to the same kc. Idempotent — no-op fast path when the cert hasn't
-# rotated.
-KEYCHAIN_PATH="$(setup_runner_keychain)"
-KEYCHAIN_PASSWORD="$APPLE_CERTIFICATE_PASSWORD"
+security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+# No -l so the keychain doesn't lock on system sleep mid-build.
+security set-keychain-settings -t 21600 -u "$KEYCHAIN_PATH"
+security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -f pkcs12 -k "$KEYCHAIN_PATH" \
+	-T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcodebuild
+security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
+	-s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-if [ -z "${APPLE_MAC_INSTALLER_P12_BASE64:-}" ]; then
-    echo "No APPLE_MAC_INSTALLER_P12_BASE64 — .pkg will be unsigned"
+# Pull Apple intermediates so the trust chain validates inside this
+# keychain alone (avoids errSecInternalComponent under --keychain).
+keychain_import_apple_intermediates "$KEYCHAIN_PATH"
+
+# Godot's macOS export reads identities from the user's search list, and
+# `security cms -D` below needs a default keychain to validate the
+# profile signature.
+keychain_activate "$KEYCHAIN_PATH" "$KEYCHAIN_PASSWORD"
+
+security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+# Optional Mac Installer Distribution cert for signed .pkg.
+if [ -n "${APPLE_MAC_INSTALLER_P12_BASE64:-}" ]; then
+	INSTALLER_CERT_PATH="$WORK_DIR/installer_certificate.p12"
+	echo "$APPLE_MAC_INSTALLER_P12_BASE64" | base64 --decode > "$INSTALLER_CERT_PATH"
+	security import "$INSTALLER_CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -f pkcs12 -k "$KEYCHAIN_PATH"
+	security set-key-partition-list -S "apple-tool:,apple:,codesign:,productbuild:" \
+		-s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+	echo "Mac Installer cert imported"
+else
+	echo "No APPLE_MAC_INSTALLER_P12_BASE64 — .pkg will be unsigned"
 fi
 
 # Extract UUID + Team ID from the profile.
@@ -47,13 +72,14 @@ PLIST="$(security cms -D -i "$PROFILE_PATH")"
 PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< "$PLIST")
 TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print TeamIdentifier:0" /dev/stdin <<< "$PLIST")
 
-mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/${PROFILE_UUID}.provisionprofile"
+PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+mkdir -p "$PROFILE_DIR"
+INSTALLED_PROFILE="$PROFILE_DIR/${PROFILE_UUID}.provisionprofile"
+cp "$PROFILE_PATH" "$INSTALLED_PROFILE"
 
 echo "macOS signing config:"
 echo "  Team ID              : $TEAM_ID"
 echo "  Profile UUID         : $PROFILE_UUID"
-echo "  Keychain             : $KEYCHAIN_PATH"
 
 # Patch export_presets.cfg with team ID + code sign identity.
 awk \
@@ -71,5 +97,6 @@ if [ -n "${GITHUB_ENV:-}" ]; then
 		echo "MACOS_PROVISIONING_PROFILE_UUID=$PROFILE_UUID"
 		echo "KEYCHAIN_PATH=$KEYCHAIN_PATH"
 		echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD"
+		echo "INSTALLED_PROVISIONING_PROFILE=$INSTALLED_PROFILE"
 	} >> "$GITHUB_ENV"
 fi

@@ -131,6 +131,13 @@ jobs:
           fi
           bash .pipeline-core/scripts/upload_ios.sh
 
+      - name: Clean up signing artefacts
+        if: always()
+        run: |
+          # shellcheck source=/dev/null
+          . .pipeline-core/scripts/keychain_helpers.sh
+          keychain_destroy "${KEYCHAIN_PATH:-}"
+          rm -f "${INSTALLED_PROVISIONING_PROFILE:-}"
 
   macos:
     name: macOS build & upload
@@ -205,6 +212,13 @@ jobs:
           fi
           bash .pipeline-core/scripts/upload_macos.sh
 
+      - name: Clean up signing artefacts
+        if: always()
+        run: |
+          # shellcheck source=/dev/null
+          . .pipeline-core/scripts/keychain_helpers.sh
+          keychain_destroy "${KEYCHAIN_PATH:-}"
+          rm -f "${INSTALLED_PROVISIONING_PROFILE:-}"
 
   tvos:
     name: tvOS build & upload
@@ -278,3 +292,10 @@ jobs:
           fi
           bash .pipeline-core/scripts/upload_tvos.sh
 
+      - name: Clean up signing artefacts
+        if: always()
+        run: |
+          # shellcheck source=/dev/null
+          . .pipeline-core/scripts/keychain_helpers.sh
+          keychain_destroy "${KEYCHAIN_PATH:-}"
+          rm -f "${INSTALLED_PROVISIONING_PROFILE:-}"

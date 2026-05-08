@@ -47,8 +47,9 @@ Before you ever push a CI build, work through these in order. Most of the time s
 
 ### 5. Self-hosted macOS runner
 
-- [ ] Xcode installed (any reasonably recent version; the workflow uses whatever `xcrun` finds).
-- [ ] Runner registered with labels `[self-hosted, macOS]` (or whatever your release workflow targets).
+- [ ] Xcode installed (any reasonably recent version; `pipeline-core/scripts/select_xcode.sh` picks the newest `Xcode*.app` automatically).
+- [ ] Runner registered with labels matching the `runs-on` in your release workflow (this org uses `[self-hosted, macOS, olympus]`).
+- [ ] One runner per macOS user account — sharing a user account between runners means sharing the keychain search list and default-keychain slot, which races during signing. The Zebra-Party setup uses `scripts/setup_runner_account.sh` from the workspace repo; see that repo's README for host requirements and the add/remove flow.
 - [ ] First run of pipeline-core's `install_godot.sh` (invoked by the reusable `ios-release.yml` workflow) will fetch Godot + the iOS export template; cache it under `RUNNER_TOOL_CACHE` so subsequent runs are fast.
 - [ ] If Godot.app gets quarantined by macOS Gatekeeper, `xattr -dr com.apple.quarantine /path/to/Godot.app`.
 
@@ -236,7 +237,7 @@ This is a smoke signal, not a problem in itself: `--export-pack` only validates 
 These aren't problems but choices that paid off across iterations:
 
 - **Two workflows: `ci.yml` and `release.yml`.** PRs run lint + tests only. Push-to-main runs the full release pipeline. Don't let `release.yml` trigger on every branch — you'll burn runner time and rate-limit the App Store Connect API.
-- **Self-hosted runners.** GitHub-hosted macOS minutes are expensive and slow. Two macOS runners (one primary, one backup) plus one Linux runner is enough.
+- **Self-hosted runners.** GitHub-hosted macOS minutes are expensive and slow. A small pool of self-hosted macOS runners is enough — give each runner its own macOS user account so signing keychains never collide between concurrent jobs.
 - **Auto-versioning from git.** `major.minor` from the latest `vX.Y.Z` tag, patch from commits-since-tag, build from `github.run_number`. No manual version bumps in CI commits → no commit loops.
 - **Direct IPA from Godot 4.6.** Don't wedge `xcodebuild -exportArchive` between Godot and the IPA — Godot 4.6's iOS exporter does it correctly when `application/export_project_only=false`. Fewer moving parts.
 - **Inject signing only at CI time.** The committed `export_presets.cfg` has empty `app_store_team_id` and `provisioning_profile_specifier_release`. `configure_ios_signing.sh` fills them in before export. Keeps secrets out of git and lets each project's CI inject its own values.
