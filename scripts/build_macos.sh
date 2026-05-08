@@ -57,15 +57,24 @@ echo "Built .app: $APP_PATH"
 # Embed provisioning profile + re-sign. Pass --keychain explicitly so
 # codesign / productbuild don't depend on the search list at signing time.
 cp "$PROFILE_PATH" "$APP_PATH/Contents/embedded.provisionprofile"
-IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
+# Look up the identities by cert presence (no -v) rather than by chain-
+# trust validation. On a fresh per-job build keychain right after the
+# Apple intermediates are imported, `security find-identity -v` can
+# briefly report "0 valid identities found" while the system trust
+# evaluator's caches catch up — but codesign with an explicit --keychain
+# still uses the cert successfully (Godot's own export step does this
+# in the same run). Don't fail the script on a transient cache state
+# when the cert is demonstrably present and usable.
+IDENTITY=$(security find-identity -p codesigning "$KEYCHAIN_PATH" \
 	| grep "Apple Distribution" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+[ -n "$IDENTITY" ] || { echo "::error::Apple Distribution identity not in $KEYCHAIN_PATH"; exit 1; }
 xattr -cr "$APP_PATH"
 codesign --force --options runtime --timestamp --keychain "$KEYCHAIN_PATH" \
 	--sign "$IDENTITY" "$APP_PATH"
 echo "Re-signed: $IDENTITY"
 
 # Create .pkg — signed if an installer cert is available, unsigned otherwise.
-INSTALLER_IDENTITY=$(security find-identity -v "$KEYCHAIN_PATH" \
+INSTALLER_IDENTITY=$(security find-identity "$KEYCHAIN_PATH" \
 	| grep -E "3rd Party Mac Developer Installer|Mac Installer Distribution" \
 	| head -1 | sed 's/.*"\(.*\)".*/\1/' || true)
 
