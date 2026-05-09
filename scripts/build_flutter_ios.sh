@@ -73,13 +73,31 @@ security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
 mkdir -p "$BUILD_DIR"
 
+# Pin PROVISIONING_PROFILE_SPECIFIER via the Runner target's Release
+# xcconfig rather than xcodebuild CLI. xcodebuild CLI build settings
+# propagate to every target in the build graph — including the Pods
+# project, which contains targets like `sqlite3`, `Pods-Runner` etc.
+# Those targets don't support provisioning profiles and abort the
+# archive with "X does not support provisioning profiles, but
+# provisioning profile <UUID> has been manually specified". Pods don't
+# include Flutter/Release.xcconfig, so writing the setting there scopes
+# it to Runner only.
+RELEASE_XCCONFIG="ios/Flutter/Release.xcconfig"
+if [ -n "$PROFILE_UUID" ] && [ -f "$RELEASE_XCCONFIG" ]; then
+    {
+        echo ""
+        echo "// Injected by build_flutter_ios.sh"
+        echo "PROVISIONING_PROFILE_SPECIFIER = $PROFILE_UUID"
+    } >> "$RELEASE_XCCONFIG"
+    echo "Wrote PROVISIONING_PROFILE_SPECIFIER to $RELEASE_XCCONFIG"
+fi
+
 SIGNING_ARGS=(
     CODE_SIGN_STYLE=Manual
     CODE_SIGN_IDENTITY="Apple Distribution"
     DEVELOPMENT_TEAM="$TEAM_ID"
     OTHER_CODE_SIGN_FLAGS="--keychain ${KEYCHAIN_PATH}"
 )
-[ -n "$PROFILE_UUID" ] && SIGNING_ARGS+=(PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID")
 
 VERSION_ARGS=()
 [ -n "${VERSION:-}" ] && VERSION_ARGS+=(MARKETING_VERSION="$VERSION")
