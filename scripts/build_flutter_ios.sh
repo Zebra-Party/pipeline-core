@@ -126,6 +126,35 @@ if [ ! -d "$ARCHIVE_PATH" ]; then
     exit 1
 fi
 
+# Overwrite the ExportOptions.plist that configure_xcode_signing.sh wrote
+# (manual signing with a single bundle-ID -> profile mapping). Manual
+# export requires every embedded bundle to appear in `provisioningProfiles`
+# and aborts with "X.framework does not support provisioning profiles" on
+# Flutter plugin frameworks (Flutter.framework, sqlite3.framework, etc.).
+# Switch to automatic export — xcodebuild looks up the locally-installed
+# profile for the Runner bundle ID and signs embedded frameworks using
+# the Apple Distribution cert in our keychain (no per-framework profile
+# needed). The archive itself is still produced with manual signing on
+# the Runner target via xcconfig + CLI.
+cat > "$EXPORT_OPTIONS_PATH_IOS" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>app-store-connect</string>
+    <key>teamID</key>
+    <string>${TEAM_ID}</string>
+    <key>signingStyle</key>
+    <string>automatic</string>
+    <key>uploadSymbols</key>
+    <true/>
+</dict>
+</plist>
+PLIST
+
+echo "Rewrote $EXPORT_OPTIONS_PATH_IOS for automatic export"
+
 echo "::group::xcodebuild -exportArchive (${SCHEME})"
 xcodebuild -exportArchive \
     -archivePath "$ARCHIVE_PATH" \
