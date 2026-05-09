@@ -41,6 +41,15 @@ on:
         description: "Reverse-DNS org for the iOS bundle ID prefix (e.g. party.zebra). Passed to `flutter create --org`."
         type: string
         required: true
+      bundle_id:
+        description: |
+          Optional override of the iOS bundle identifier. Use when the
+          desired bundle ID isn't `<flutter_org>.<lowerCamelCase(flutter_project_name)>`
+          (e.g. project name is `wifes_cookbook` but the bundle ID is
+          `com.zebraparty.wifescookbook`). Set as `PRODUCT_BUNDLE_IDENTIFIER`
+          on the xcodebuild archive call.
+        type: string
+        default: ""
       flutter_version:
         description: "Flutter SDK version (subosito/flutter-action format)"
         type: string
@@ -92,7 +101,7 @@ jobs:
       - name: Select Xcode
         run: bash .pipeline-core/scripts/select_xcode.sh
 
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: ${{ inputs.flutter_version }}
           channel: stable
@@ -102,7 +111,13 @@ jobs:
         # `ios/` is gitignored and regenerated here so it can never drift
         # behind the Flutter SDK. Mirrors what the project's CI workflow
         # does — keep them in sync if you change one.
-        run: flutter create --platforms=ios --org "${{ inputs.flutter_org }}" --project-name "${{ inputs.flutter_project_name }}" .
+        #
+        # Inputs are passed via env, not interpolated into the run block,
+        # so a malicious value couldn't break out of the shell quoting.
+        env:
+          FLUTTER_ORG: ${{ inputs.flutter_org }}
+          FLUTTER_PROJECT_NAME: ${{ inputs.flutter_project_name }}
+        run: flutter create --platforms=ios --org "$FLUTTER_ORG" --project-name "$FLUTTER_PROJECT_NAME" .
 
       - run: flutter pub get
 
@@ -142,6 +157,7 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
           BUILD: ${{ steps.version.outputs.build }}
+          BUNDLE_ID: ${{ inputs.bundle_id }}
         run: bash .pipeline-core/scripts/build_flutter_ios.sh
 
       - name: Upload to TestFlight

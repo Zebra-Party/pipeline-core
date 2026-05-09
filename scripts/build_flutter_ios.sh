@@ -20,6 +20,10 @@
 #   APP_NAME   — used for the IPA filename + xcarchive name (default: Runner)
 #   VERSION    — passed to --build-name and MARKETING_VERSION
 #   BUILD      — passed to --build-number and CURRENT_PROJECT_VERSION
+#   BUNDLE_ID  — overrides PRODUCT_BUNDLE_IDENTIFIER. Use when the desired
+#                bundle ID isn't `<org>.<lowerCamelCase(project_name)>`.
+#                Must match the bundle ID embedded in the provisioning
+#                profile, otherwise the export step fails.
 #   BUILD_DIR  — output directory (default: build/flutter-ios)
 #   SCHEME     — Xcode scheme (default: Runner)
 #
@@ -81,6 +85,12 @@ VERSION_ARGS=()
 [ -n "${VERSION:-}" ] && VERSION_ARGS+=(MARKETING_VERSION="$VERSION")
 [ -n "${BUILD:-}"   ] && VERSION_ARGS+=(CURRENT_PROJECT_VERSION="$BUILD")
 
+BUNDLE_ID_ARGS=()
+if [ -n "${BUNDLE_ID:-}" ]; then
+    BUNDLE_ID_ARGS+=(PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID")
+    echo "Overriding PRODUCT_BUNDLE_IDENTIFIER=$BUNDLE_ID"
+fi
+
 echo "::group::xcodebuild archive (${SCHEME})"
 xcodebuild archive \
     -workspace "$WORKSPACE" \
@@ -89,7 +99,8 @@ xcodebuild archive \
     -configuration Release \
     -archivePath "$ARCHIVE_PATH" \
     "${SIGNING_ARGS[@]}" \
-    "${VERSION_ARGS[@]}"
+    "${VERSION_ARGS[@]}" \
+    "${BUNDLE_ID_ARGS[@]}"
 echo "::endgroup::"
 
 if [ ! -d "$ARCHIVE_PATH" ]; then
