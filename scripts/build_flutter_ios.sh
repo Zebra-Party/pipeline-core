@@ -164,28 +164,45 @@ if [ ! -d "$ARCHIVE_PATH" ]; then
     exit 1
 fi
 
-echo "::group::xcodebuild -exportArchive (${SCHEME})"
-xcodebuild -exportArchive \
-    -archivePath "$ARCHIVE_PATH" \
-    -exportPath "$EXPORT_DIR" \
-    -exportOptionsPlist "$EXPORT_OPTIONS_PATH_IOS" \
-    -allowProvisioningUpdates
-echo "::endgroup::"
-
-IPA_PATH="$(find "$EXPORT_DIR" -maxdepth 2 -name '*.ipa' -print -quit || true)"
-if [ -z "$IPA_PATH" ]; then
-    echo "::error::No .ipa found in $EXPORT_DIR"
-    ls -la "$EXPORT_DIR" || true
+echo "::group::Package IPA from archive"
+# We deliberately don't run `xcodebuild -exportArchive`. With
+# signingStyle=manual it iterates over every embedded bundle (including
+# Pod frameworks like sqlite3.framework, Flutter.framework) and aborts
+# with "X.framework does not support provisioning profiles" because
+# frameworks can't take profiles. signingStyle=automatic needs an Apple
+# ID logged in, which CI doesn't have. Disabling pod signing helps the
+# archive but doesn't change the export's enforcement.
+#
+# The archive's Runner.app is already fully signed: the Runner target
+# was archived with manual signing (cert from configure_xcode_signing.sh,
+# profile UUID from Release.xcconfig), and the archive's Embed Frameworks
+# build phase signed every embedded framework with the same cert. So we
+# can package the IPA ourselves — it's just `Payload/<App>.app` zipped.
+ARCHIVE_APP="$ARCHIVE_PATH/Products/Applications/${SCHEME}.app"
+if [ ! -d "$ARCHIVE_APP" ]; then
+    echo "::error::${SCHEME}.app not found inside archive at $ARCHIVE_APP"
+    ls -la "$ARCHIVE_PATH/Products/Applications/" 2>&1 || true
     exit 1
 fi
 
-# Rename Runner.ipa to <APP_NAME>.ipa so the artefact is identifiable
-# when multiple Flutter apps share the same runner cache directory.
-if [ "$APP_NAME" != "Runner" ]; then
-    NEW_PATH="$EXPORT_DIR/${APP_NAME}.ipa"
-    mv "$IPA_PATH" "$NEW_PATH"
-    IPA_PATH="$NEW_PATH"
+mkdir -p "$EXPORT_DIR/Payload"
+cp -R "$ARCHIVE_APP" "$EXPORT_DIR/Payload/${SCHEME}.app"
+
+# Sanity-check the signature so we fail fast if archive signing was
+# silently incomplete. Doesn't gate the upload — App Store Connect
+# does the authoritative check on receipt.
+codesign --verify --deep --strict --verbose=2 \
+    "$EXPORT_DIR/Payload/${SCHEME}.app" 2>&1 \
+    || echo "::warning::codesign --verify reported issues; uploading anyway and letting App Store Connect arbitrate"
+
+(cd "$EXPORT_DIR" && /usr/bin/zip -ry "${APP_NAME}.ipa" Payload >/dev/null)
+IPA_PATH="$EXPORT_DIR/${APP_NAME}.ipa"
+echo "::endgroup::"
+
+if [ ! -f "$IPA_PATH" ]; then
+    echo "::error::IPA not produced at $IPA_PATH"
+    exit 1
 fi
 
-echo "Built IPA: $IPA_PATH"
+echo "Built IPA: $IPA_PATH ($(du -h "$IPA_PATH" | awk '{print $1}'))"
 [ -n "${GITHUB_ENV:-}" ] && echo "IPA_PATH=$IPA_PATH" >> "$GITHUB_ENV"
