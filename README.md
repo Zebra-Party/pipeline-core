@@ -22,9 +22,11 @@ Updating a script or workflow here takes effect on the next run in every consume
 | Workflow | Purpose | Docs |
 |---|---|---|
 | `gdscript-ci.yml` | Lint, reimport, boot every scene, headless tests, PR screenshots | [docs/gdscript-ci.md](docs/gdscript-ci.md) |
-| `ios-release.yml` | Code-sign and export IPA, upload to TestFlight | [docs/ios-release.md](docs/ios-release.md) |
-| `macos-release.yml` | Code-sign, export .app + .pkg, upload to TestFlight | [docs/macos-release.md](docs/macos-release.md) |
-| `android-build.yml` | Export unsigned debug APK, upload as artifact | [docs/android-build.md](docs/android-build.md) |
+| `ios-release.yml` | Godot — code-sign and export IPA, upload to TestFlight | [docs/ios-release.md](docs/ios-release.md) |
+| `macos-release.yml` | Godot — code-sign, export .app + .pkg, upload to TestFlight | [docs/macos-release.md](docs/macos-release.md) |
+| `android-build.yml` | Godot — export unsigned debug APK, upload as artifact | [docs/android-build.md](docs/android-build.md) |
+| `xcode-release.yml` | Native Xcode (iOS/macOS/tvOS) — code-sign + TestFlight upload | — |
+| `flutter-ios-release.yml` | Flutter iOS — code-sign IPA, upload to TestFlight | [docs/flutter-ios-release.md](docs/flutter-ios-release.md) |
 
 ## Quick start
 
