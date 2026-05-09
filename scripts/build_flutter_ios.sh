@@ -53,6 +53,35 @@ if [ ! -d "$WORKSPACE" ]; then
     exit 1
 fi
 
+# Disable code signing on every Pod target. Without this, embedded
+# plugin frameworks (Flutter.framework, sqlite3.framework, …) get
+# signed independently during their own build — the export step then
+# refuses with "X.framework does not support provisioning profiles"
+# because their auto-generated bundle IDs aren't in the manual
+# ExportOptions.plist (and frameworks can't take profiles anyway).
+# Turning off signing here lets the Runner target's "Embed Frameworks"
+# build phase sign them in place using Runner's Apple Distribution cert.
+#
+# CocoaPods 1.5+ runs every `post_install` hook in the Podfile in
+# declaration order, so appending a new one is safe even though
+# `flutter create` already wrote one for `flutter_additional_ios_build_settings`.
+PODFILE="ios/Podfile"
+if [ -f "$PODFILE" ] && ! grep -q 'CODE_SIGNING_ALLOWED.*=.*"NO"' "$PODFILE"; then
+    cat >> "$PODFILE" <<'RUBY'
+
+# Injected by build_flutter_ios.sh — see that script for the rationale.
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+      config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
+      config.build_settings['EXPANDED_CODE_SIGN_IDENTITY'] = ''
+    end
+  end
+end
+RUBY
+fi
+
 # `flutter build ios --no-codesign` runs `pod install`, compiles the Dart
 # AOT snapshot, and assembles Runner.app under build/ios/iphoneos/. The
 # subsequent xcodebuild archive picks that up.
@@ -125,35 +154,6 @@ if [ ! -d "$ARCHIVE_PATH" ]; then
     echo "::error::Archive not produced at $ARCHIVE_PATH"
     exit 1
 fi
-
-# Overwrite the ExportOptions.plist that configure_xcode_signing.sh wrote
-# (manual signing with a single bundle-ID -> profile mapping). Manual
-# export requires every embedded bundle to appear in `provisioningProfiles`
-# and aborts with "X.framework does not support provisioning profiles" on
-# Flutter plugin frameworks (Flutter.framework, sqlite3.framework, etc.).
-# Switch to automatic export — xcodebuild looks up the locally-installed
-# profile for the Runner bundle ID and signs embedded frameworks using
-# the Apple Distribution cert in our keychain (no per-framework profile
-# needed). The archive itself is still produced with manual signing on
-# the Runner target via xcconfig + CLI.
-cat > "$EXPORT_OPTIONS_PATH_IOS" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>method</key>
-    <string>app-store-connect</string>
-    <key>teamID</key>
-    <string>${TEAM_ID}</string>
-    <key>signingStyle</key>
-    <string>automatic</string>
-    <key>uploadSymbols</key>
-    <true/>
-</dict>
-</plist>
-PLIST
-
-echo "Rewrote $EXPORT_OPTIONS_PATH_IOS for automatic export"
 
 echo "::group::xcodebuild -exportArchive (${SCHEME})"
 xcodebuild -exportArchive \
