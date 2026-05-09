@@ -13,8 +13,8 @@ Builds a signed IPA from a Flutter project and uploads it to TestFlight. Mirrors
 | Input | Type | Default | Description |
 |---|---|---|---|
 | `app_name` | string | _(required)_ | Output IPA basename. |
-| `flutter_project_name` | string | _(required)_ | Dart package name (e.g. `wifes_cookbook`). Passed to `flutter create --project-name`. |
-| `flutter_org` | string | _(required)_ | Reverse-DNS org prefix for the bundle ID (e.g. `party.zebra`). Passed to `flutter create --org`. |
+| `flutter_project_name` | string | _(required)_ | Dart package name (snake_case). Passed to `flutter create --project-name`. |
+| `flutter_org` | string | _(required)_ | Reverse-DNS org prefix for the bundle ID. Passed to `flutter create --org`. |
 | `bundle_id` | string | _(empty)_ | Optional override of the iOS bundle ID. Set when the desired ID isn't `<flutter_org>.<lowerCamelCase(flutter_project_name)>`. Passes `PRODUCT_BUNDLE_IDENTIFIER` to xcodebuild. |
 | `flutter_version` | string | `3.41.x` | Flutter SDK version (`subosito/flutter-action` format). |
 | `runner` | string | `["self-hosted","macOS","olympus"]` | JSON array of runner labels. Must be macOS. |

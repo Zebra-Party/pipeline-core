@@ -15,16 +15,10 @@ name: Flutter iOS Release
 #     ios:
 #       uses: Zebra-Party/pipeline-core/.github/workflows/flutter-ios-release.yml@main
 #       with:
-#         app_name: "WifesCookbook"
-#         flutter_project_name: "wifes_cookbook"
-#         flutter_org: "party.zebra"
-#       secrets:
-#         APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
-#         APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-#         APPLE_IOS_DISTRIBUTION_PROVISION: ${{ secrets.APPLE_IOS_DISTRIBUTION_PROVISION }}
-#         APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-#         APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-#         APP_STORE_CONNECT_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_BASE64 }}
+#         app_name: "MyApp"
+#         flutter_project_name: "my_app"
+#         flutter_org: "com.example"
+#       secrets: inherit
 
 on:
   workflow_call:
@@ -34,20 +28,19 @@ on:
         type: string
         required: true
       flutter_project_name:
-        description: "Dart package name (e.g. wifes_cookbook). Passed to `flutter create --project-name`."
+        description: "Dart package name (snake_case). Passed to `flutter create --project-name`."
         type: string
         required: true
       flutter_org:
-        description: "Reverse-DNS org for the iOS bundle ID prefix (e.g. party.zebra). Passed to `flutter create --org`."
+        description: "Reverse-DNS org for the iOS bundle ID prefix. Passed to `flutter create --org`."
         type: string
         required: true
       bundle_id:
         description: |
           Optional override of the iOS bundle identifier. Use when the
-          desired bundle ID isn't `<flutter_org>.<lowerCamelCase(flutter_project_name)>`
-          (e.g. project name is `wifes_cookbook` but the bundle ID is
-          `com.zebraparty.wifescookbook`). Set as `PRODUCT_BUNDLE_IDENTIFIER`
-          on the xcodebuild archive call.
+          desired bundle ID isn't the default
+          `<flutter_org>.<lowerCamelCase(flutter_project_name)>`. Set as
+          `PRODUCT_BUNDLE_IDENTIFIER` on the xcodebuild archive call.
         type: string
         default: ""
       flutter_version:
