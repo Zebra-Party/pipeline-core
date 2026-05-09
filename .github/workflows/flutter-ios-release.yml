@@ -100,6 +100,18 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Ensure CocoaPods
+        # Flutter plugins ship their iOS native code as pods, so `flutter
+        # build ios` invokes `pod install` and fails if pod isn't on PATH.
+        # The org's olympus runners don't have it pre-installed yet — the
+        # runner-onboarding script will be updated separately. Idempotent:
+        # `brew install` on an already-installed formula is a fast no-op.
+        run: |
+          if ! command -v pod >/dev/null 2>&1; then
+            brew install cocoapods
+          fi
+          pod --version
+
       - name: Materialise platform folders
         # `ios/` is gitignored and regenerated here so it can never drift
         # behind the Flutter SDK. Mirrors what the project's CI workflow
@@ -111,6 +123,21 @@ jobs:
           FLUTTER_ORG: ${{ inputs.flutter_org }}
           FLUTTER_PROJECT_NAME: ${{ inputs.flutter_project_name }}
         run: flutter create --platforms=ios --org "$FLUTTER_ORG" --project-name "$FLUTTER_PROJECT_NAME" .
+
+      - name: Override iOS bundle identifier
+        # `flutter create` derives the bundle ID as
+        # `<flutter_org>.<lowerCamelCase(project_name)>` and bakes it into
+        # ios/Runner.xcodeproj/project.pbxproj. When the App Store identifier
+        # doesn't follow that derivation, sed-replace it so Flutter's own
+        # `flutter build ios` step (which runs before xcodebuild) sees the
+        # right ID — otherwise the assembled Runner.app and the signing
+        # profile disagree.
+        if: inputs.bundle_id != ''
+        env:
+          BUNDLE_ID: ${{ inputs.bundle_id }}
+        run: |
+          sed -i '' -E "s|PRODUCT_BUNDLE_IDENTIFIER = [^;]+;|PRODUCT_BUNDLE_IDENTIFIER = ${BUNDLE_ID};|g" ios/Runner.xcodeproj/project.pbxproj
+          grep -n PRODUCT_BUNDLE_IDENTIFIER ios/Runner.xcodeproj/project.pbxproj | head
 
       - run: flutter pub get
 
