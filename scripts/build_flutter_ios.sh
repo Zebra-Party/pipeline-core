@@ -62,23 +62,32 @@ fi
 # Turning off signing here lets the Runner target's "Embed Frameworks"
 # build phase sign them in place using Runner's Apple Distribution cert.
 #
-# CocoaPods 1.5+ runs every `post_install` hook in the Podfile in
-# declaration order, so appending a new one is safe even though
-# `flutter create` already wrote one for `flutter_additional_ios_build_settings`.
+# CocoaPods 1.16 rejects a Podfile that declares more than one
+# `post_install` block, so we splice the signing-disable lines into
+# the existing block (the one `flutter create` writes calling
+# `flutter_additional_ios_build_settings`) rather than appending a new
+# one. Ruby ships with macOS and is what CocoaPods uses — saves us a
+# brittle multi-line sed.
 PODFILE="ios/Podfile"
-if [ -f "$PODFILE" ] && ! grep -q 'CODE_SIGNING_ALLOWED.*=.*"NO"' "$PODFILE"; then
-    cat >> "$PODFILE" <<'RUBY'
-
-# Injected by build_flutter_ios.sh — see that script for the rationale.
-post_install do |installer|
-  installer.pods_project.targets.each do |target|
-    target.build_configurations.each do |config|
-      config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
-      config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
-      config.build_settings['EXPANDED_CODE_SIGN_IDENTITY'] = ''
-    end
-  end
+if [ -f "$PODFILE" ] && ! grep -q "CODE_SIGNING_ALLOWED.*=.*'NO'" "$PODFILE"; then
+    ruby <<'RUBY'
+path = 'ios/Podfile'
+content = File.read(path)
+inject = <<~INJECT
+      target.build_configurations.each do |config|
+        config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+        config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
+        config.build_settings['EXPANDED_CODE_SIGN_IDENTITY'] = ''
+      end
+INJECT
+needle = 'flutter_additional_ios_build_settings(target)'
+unless content.include?(needle)
+  warn "::warning::Podfile doesn't contain '#{needle}', signing-disable injection skipped"
+  exit 0
 end
+content.sub!(needle, needle + "\n" + inject.chomp)
+File.write(path, content)
+puts "Patched #{path} to disable code signing on Pod targets"
 RUBY
 fi
 
