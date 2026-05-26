@@ -39,15 +39,23 @@ keychain_unique_path() {
 # because Godot's exporters and parts of xcodebuild's archive step shell
 # out to codesign without --keychain and fall back to the search list /
 # default keychain.
+#
+# Build keychain is the SOLE entry in the user search list during the
+# build — login.keychain-db is excluded. This is intentional:
+# `keychain_import_apple_intermediates` plus the apple.com cert
+# backstop guarantee the build keychain contains every intermediate
+# and root we need, so codesign has no reason to look elsewhere.
+# Including login.keychain-db has been observed to cause
+# errSecInternalComponent on runners that have stale Apple Distribution
+# leaf certs or older WWDR intermediates left over from previous runs:
+# codesign picks the stale leaf, can't match it to a current
+# intermediate, and aborts. Build cleanup (keychain_destroy) puts
+# login.keychain-db back as the default after the build.
 keychain_activate() {
     local kc="${1:?keychain path required}"
     local pw="${2:?keychain password required}"
     security unlock-keychain -p "$pw" "$kc"
-    if [ -e "$LOGIN_KEYCHAIN" ]; then
-        security list-keychains -d user -s "$kc" "$LOGIN_KEYCHAIN"
-    else
-        security list-keychains -d user -s "$kc"
-    fi
+    security list-keychains -d user -s "$kc"
     security default-keychain -s "$kc"
 }
 
