@@ -92,17 +92,52 @@ SIGNING_ARGS=(
 )
 [ -n "$PROFILE_UUID" ] && SIGNING_ARGS+=(PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID")
 
-echo "::group::xcodebuild archive (${PLATFORM})"
-# shellcheck disable=SC2086  # PROJECT_FLAG is intentionally word-split
-xcodebuild archive \
-    $PROJECT_FLAG \
-    -scheme "$SCHEME" \
-    -destination "$DESTINATION" \
-    -configuration Release \
-    -archivePath "$ARCHIVE_PATH" \
-    "${SIGNING_ARGS[@]}" \
-    "${VERSION_ARGS[@]}"
-echo "::endgroup::"
+# xcodebuild archive with a small retry on transient codesign failures.
+# `errSecInternalComponent` from codesign during archive (and the
+# accompanying "unable to build chain to self-signed root for signer"
+# warning) is overwhelmingly transient on self-hosted Mac runners — a
+# keychain daemon race or Apple's timestamp service hiccupping. The
+# archive itself is idempotent: a second attempt picks up the
+# already-compiled binaries from DerivedData so the retry cost is
+# small (~30–60s) compared with chasing a flake across a re-push.
+#
+# Retry up to 3 times. Only treat errSecInternalComponent / chain
+# failures as retryable — a real compile error fails fast on the
+# first attempt and we don't want to mask it by re-running.
+ARCHIVE_LOG="${RUNNER_TEMP:-/tmp}/xcodebuild-archive-${PLATFORM}.log"
+attempt=1
+max_attempts=3
+while :; do
+    echo "::group::xcodebuild archive (${PLATFORM}) attempt ${attempt}/${max_attempts}"
+    set +e
+    # shellcheck disable=SC2086  # PROJECT_FLAG is intentionally word-split
+    xcodebuild archive \
+        $PROJECT_FLAG \
+        -scheme "$SCHEME" \
+        -destination "$DESTINATION" \
+        -configuration Release \
+        -archivePath "$ARCHIVE_PATH" \
+        "${SIGNING_ARGS[@]}" \
+        "${VERSION_ARGS[@]}" 2>&1 | tee "$ARCHIVE_LOG"
+    rc=${PIPESTATUS[0]}
+    set -e
+    echo "::endgroup::"
+    if [ "$rc" -eq 0 ]; then
+        break
+    fi
+    if [ "$attempt" -ge "$max_attempts" ]; then
+        echo "::error::xcodebuild archive failed after ${attempt} attempts"
+        exit "$rc"
+    fi
+    if grep -qE "errSecInternalComponent|unable to build chain to self-signed root|The timestamp service is not available" "$ARCHIVE_LOG"; then
+        echo "::warning::Transient codesign failure on attempt ${attempt}; retrying after 5s"
+        attempt=$((attempt + 1))
+        sleep 5
+        continue
+    fi
+    echo "::error::xcodebuild archive failed with a non-retryable error"
+    exit "$rc"
+done
 
 if [ ! -d "$ARCHIVE_PATH" ]; then
     echo "::error::Archive not produced at $ARCHIVE_PATH"
