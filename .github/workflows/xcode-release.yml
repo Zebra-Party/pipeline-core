@@ -79,6 +79,9 @@ jobs:
       - name: Select Xcode
         run: bash .pipeline-core/scripts/select_xcode.sh
 
+      - name: Regenerate Xcode project from project.yml (if present)
+        run: bash .pipeline-core/scripts/regenerate_xcodeproj.sh
+
       - name: Check signing secrets
         id: signing
         env:
@@ -158,6 +161,9 @@ jobs:
 
       - name: Select Xcode
         run: bash .pipeline-core/scripts/select_xcode.sh
+
+      - name: Regenerate Xcode project from project.yml (if present)
+        run: bash .pipeline-core/scripts/regenerate_xcodeproj.sh
 
       - name: Check signing secrets
         id: signing
@@ -239,6 +245,9 @@ jobs:
 
       - name: Select Xcode
         run: bash .pipeline-core/scripts/select_xcode.sh
+
+      - name: Regenerate Xcode project from project.yml (if present)
+        run: bash .pipeline-core/scripts/regenerate_xcodeproj.sh
 
       - name: Check signing secrets
         id: signing
