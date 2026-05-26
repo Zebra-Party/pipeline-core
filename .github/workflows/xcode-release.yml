@@ -38,6 +38,14 @@ on:
         description: "Upload to TestFlight on merges to main"
         type: boolean
         default: true
+      regenerate_xcodeproj:
+        description: >-
+          Run `xcodegen generate` before building when project.yml is present.
+          Set to false for repos whose committed .xcodeproj has hand-tuned
+          settings xcodegen drops (notably iOS code-signing details that
+          aren't expressible in project.yml). Default true.
+        type: boolean
+        default: true
     secrets:
       APPLE_CERTIFICATE_P12_BASE64:
         required: true
@@ -80,6 +88,7 @@ jobs:
         run: bash .pipeline-core/scripts/select_xcode.sh
 
       - name: Regenerate Xcode project from project.yml (if present)
+        if: inputs.regenerate_xcodeproj
         run: bash .pipeline-core/scripts/regenerate_xcodeproj.sh
 
       - name: Check signing secrets
@@ -163,6 +172,7 @@ jobs:
         run: bash .pipeline-core/scripts/select_xcode.sh
 
       - name: Regenerate Xcode project from project.yml (if present)
+        if: inputs.regenerate_xcodeproj
         run: bash .pipeline-core/scripts/regenerate_xcodeproj.sh
 
       - name: Check signing secrets
@@ -247,6 +257,7 @@ jobs:
         run: bash .pipeline-core/scripts/select_xcode.sh
 
       - name: Regenerate Xcode project from project.yml (if present)
+        if: inputs.regenerate_xcodeproj
         run: bash .pipeline-core/scripts/regenerate_xcodeproj.sh
 
       - name: Check signing secrets
