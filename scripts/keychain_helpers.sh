@@ -83,6 +83,31 @@ keychain_import_apple_intermediates() {
             fi
         fi
     done
+
+    # Belt-and-braces: also fetch the current Apple intermediates straight
+    # from Apple's certificate authority page. Some self-hosted runners
+    # have stale or incomplete System.keychains (specifically observed on
+    # an Olympus runner missing AppleWWDRCAG6) and the chain build then
+    # fails with errSecInternalComponent / "unable to build chain to
+    # self-signed root". These fetches are idempotent — re-importing a
+    # cert already in the keychain is a no-op.
+    local cer
+    for url in \
+            "https://www.apple.com/certificateauthority/AppleWWDRCAG6.cer" \
+            "https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer" \
+            "https://www.apple.com/certificateauthority/AppleIncRootCertificate.cer" \
+            "https://www.apple.com/certificateauthority/AppleRootCA-G3.cer"; do
+        cer="$tmp/$(basename "$url")"
+        if curl -fsSL --connect-timeout 10 --max-time 30 -o "$cer" "$url" \
+            && [ -s "$cer" ]; then
+            if security import "$cer" -k "$kc" -A 2>/dev/null; then
+                imported=$((imported + 1))
+            fi
+        else
+            echo "warning: failed to fetch $url; relying on System.keychain copy" >&2
+        fi
+    done
+
     rm -rf "$tmp"
     echo "Imported $imported Apple intermediate / root certificates into $kc"
 }
