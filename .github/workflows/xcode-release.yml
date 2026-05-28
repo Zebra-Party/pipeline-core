@@ -9,7 +9,7 @@ name: Xcode Release
 #
 #   jobs:
 #     release:
-#       uses: Zebra-Party/pipeline-core/.github/workflows/xcode-release.yml@main
+#       uses: Zebra-Party/pipeline-core/.github/workflows/xcode-release.yml@v1
 #       with:
 #         app_name: "MyApp"
 #       secrets:
@@ -143,6 +143,26 @@ jobs:
           fi
           bash .pipeline-core/scripts/upload_ios.sh
 
+      - name: Tag release
+        if: >-
+          steps.signing.outputs.skip != 'true' &&
+          github.ref == 'refs/heads/main' &&
+          github.event_name != 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if gh release view "v$VERSION" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release v$VERSION already exists — skipping."
+          else
+            gh release create "v$VERSION" \
+              --repo "${{ github.repository }}" \
+              --title "v$VERSION" \
+              --generate-notes \
+              --latest \
+              || echo "Release creation skipped (may have been created by a parallel job)."
+          fi
+
       - name: Clean up signing artefacts
         if: always()
         run: |
@@ -228,6 +248,26 @@ jobs:
           fi
           bash .pipeline-core/scripts/upload_macos.sh
 
+      - name: Tag release
+        if: >-
+          steps.signing.outputs.skip != 'true' &&
+          github.ref == 'refs/heads/main' &&
+          github.event_name != 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if gh release view "v$VERSION" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release v$VERSION already exists — skipping."
+          else
+            gh release create "v$VERSION" \
+              --repo "${{ github.repository }}" \
+              --title "v$VERSION" \
+              --generate-notes \
+              --latest \
+              || echo "Release creation skipped (may have been created by a parallel job)."
+          fi
+
       - name: Clean up signing artefacts
         if: always()
         run: |
@@ -311,6 +351,26 @@ jobs:
             exit 0
           fi
           bash .pipeline-core/scripts/upload_tvos.sh
+
+      - name: Tag release
+        if: >-
+          steps.signing.outputs.skip != 'true' &&
+          github.ref == 'refs/heads/main' &&
+          github.event_name != 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if gh release view "v$VERSION" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release v$VERSION already exists — skipping."
+          else
+            gh release create "v$VERSION" \
+              --repo "${{ github.repository }}" \
+              --title "v$VERSION" \
+              --generate-notes \
+              --latest \
+              || echo "Release creation skipped (may have been created by a parallel job)."
+          fi
 
       - name: Clean up signing artefacts
         if: always()

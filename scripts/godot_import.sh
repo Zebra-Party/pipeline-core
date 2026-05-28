@@ -21,12 +21,6 @@ LOG="${RUNNER_TEMP:-/tmp}/godot_import.log"
 "$GODOT" --headless --editor --path . --quit-after "$FRAMES" > "$LOG" 2>&1
 status=$?
 
-if [ "$status" -eq 0 ] && grep -qiE "Could not find type|Identifier .* not declared|referenced non-existent resource" "$LOG"; then
-	echo "Import didn't fully settle on the first pass (ordering race), retrying once…"
-	"$GODOT" --headless --editor --path . --quit-after "$FRAMES" > "$LOG" 2>&1
-	status=$?
-fi
-
 echo "::group::Godot output (last 40 lines)"
 tail -40 "$LOG" || true
 echo "::endgroup::"

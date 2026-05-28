@@ -3,11 +3,10 @@
 # DEVELOPER_DIR to $GITHUB_ENV so subsequent steps invoke the correct
 # xcodebuild / codesign / etc.
 #
-# Self-hosted olympus runners have multiple Xcode versions installed
-# and `xcode-select` typically points at /Library/Developer/CommandLineTools,
-# which can't drive xcodebuild. Setting DEVELOPER_DIR per-job avoids the
-# need to mutate the system-wide xcode-select state (and works even on
-# GitHub-hosted runners as a no-op equivalent).
+# Self-hosted runners may have multiple Xcode versions installed and
+# `xcode-select` may point at the CLI tools rather than an Xcode.app.
+# Setting DEVELOPER_DIR per-job picks the newest Xcode without mutating
+# the system-wide xcode-select state.
 
 set -euo pipefail
 

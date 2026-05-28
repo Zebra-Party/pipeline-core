@@ -7,7 +7,7 @@ name: macOS Release
 #   jobs:
 #     macos:
 #       needs: test
-#       uses: Zebra-Party/pipeline-core/.github/workflows/macos-release.yml@main
+#       uses: Zebra-Party/pipeline-core/.github/workflows/macos-release.yml@v1
 #       with:
 #         godot_version: "4.6.2-stable"
 #         app_name: "Puzzle70s"
@@ -20,6 +20,7 @@ on:
         type: string
         default: "4.6.2-stable"
       runner:
+        description: 'JSON array of runner labels'
         type: string
         default: '["self-hosted", "macOS", "ephemeral"]'
       app_name:
@@ -31,15 +32,13 @@ on:
         type: string
         default: "macOS (Universal)"
       upload_to_testflight:
+        description: "Upload to TestFlight on merges to main"
         type: boolean
         default: true
       pre_export_script:
         description: "Optional project script to run before Godot export"
         type: string
         default: ""
-      clean_checkout:
-        type: boolean
-        default: false
 
 jobs:
   macos:
@@ -54,7 +53,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          clean: ${{ inputs.clean_checkout }}
 
       - uses: actions/checkout@v4
         with:
@@ -118,6 +116,26 @@ jobs:
             exit 0
           fi
           bash .pipeline-core/scripts/upload_macos.sh
+
+      - name: Tag release
+        if: >-
+          steps.signing.outputs.skip != 'true' &&
+          github.ref == 'refs/heads/main' &&
+          github.event_name != 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if gh release view "v$VERSION" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release v$VERSION already exists — skipping."
+          else
+            gh release create "v$VERSION" \
+              --repo "${{ github.repository }}" \
+              --title "v$VERSION" \
+              --generate-notes \
+              --latest \
+              || echo "Release creation skipped (may have been created by a parallel job)."
+          fi
 
       - name: Clean up signing artefacts
         if: always()
