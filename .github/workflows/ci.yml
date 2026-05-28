@@ -23,6 +23,6 @@ jobs:
         run: |
           curl -sSfL \
             "https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash" \
-            | bash -s -- -b /usr/local/bin
+            | bash -s -- latest /usr/local/bin
       - name: Run actionlint on all workflows
         run: actionlint .github/workflows/*.yml
