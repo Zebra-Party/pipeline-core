@@ -16,6 +16,10 @@ behaviour) bump the major version.
   also fires on fresh caches when committed `.import` sidecars exist but their
   `.ctex` targets haven't been flushed yet — Godot 4.6 can parse a `.tres` theme
   file that references a texture before that texture's import pass completes.
+- Updated `actions/checkout` from `v4` to `v4.3.1` across all workflows (latest
+  maintenance release on the v4 branch).
+- Default `screenshot_scene_glob` in `gdscript-ci.yml` changed from `scenes/*.tscn`
+  to `scenes/**/*.tscn` — the old default missed scenes in subdirectories.
 
 ---
 

@@ -44,11 +44,11 @@ jobs:
     env:
       GODOT_VERSION: ${{ inputs.godot_version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.3.1
         with:
           fetch-depth: 0
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.3.1
         with:
           repository: Zebra-Party/pipeline-core
           ref: main
