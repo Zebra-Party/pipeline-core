@@ -17,9 +17,12 @@ behaviour) bump the major version.
   `.ctex` targets haven't been flushed yet — Godot 4.6 can parse a `.tres` theme
   file that references a texture before that texture's import pass completes.
 - Updated `actions/checkout` from `v4` to `v4.3.1` across all workflows (latest
-  maintenance release on the v4 branch).
+  maintenance release on the v4 branch; bumped to `v6` in a subsequent commit).
 - Default `screenshot_scene_glob` in `gdscript-ci.yml` changed from `scenes/*.tscn`
   to `scenes/**/*.tscn` — the old default missed scenes in subdirectories.
+
+- Bumped `actions/checkout` from `v4.3.1` to `v6` (Node.js 24; eliminates
+  the Node.js 20 deprecation warning that fires from June 2026 onwards).
 
 ---
 

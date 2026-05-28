@@ -50,11 +50,11 @@ jobs:
       APP_NAME: ${{ inputs.app_name }}
       MACOS_PRESET: ${{ inputs.macos_preset }}
     steps:
-      - uses: actions/checkout@v4.3.1
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - uses: actions/checkout@v4.3.1
+      - uses: actions/checkout@v6
         with:
           repository: Zebra-Party/pipeline-core
           ref: main

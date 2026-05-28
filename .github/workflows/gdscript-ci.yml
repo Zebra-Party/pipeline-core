@@ -56,9 +56,9 @@ jobs:
       SCENE_DIR: ${{ inputs.scene_dir }}
       TEST_PATTERN: ${{ inputs.test_pattern }}
     steps:
-      - uses: actions/checkout@v4.3.1
+      - uses: actions/checkout@v6
 
-      - uses: actions/checkout@v4.3.1
+      - uses: actions/checkout@v6
         with:
           repository: Zebra-Party/pipeline-core
           ref: main
@@ -101,9 +101,9 @@ jobs:
       GODOT_VERSION: ${{ inputs.godot_version }}
       SCENE_GLOB: ${{ inputs.screenshot_scene_glob }}
     steps:
-      - uses: actions/checkout@v4.3.1
+      - uses: actions/checkout@v6
 
-      - uses: actions/checkout@v4.3.1
+      - uses: actions/checkout@v6
         with:
           repository: Zebra-Party/pipeline-core
           ref: main
