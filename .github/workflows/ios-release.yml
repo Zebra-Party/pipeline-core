@@ -23,7 +23,7 @@ on:
       runner:
         description: 'JSON array of runner labels'
         type: string
-        default: '["self-hosted", "macOS", "olympus"]'
+        default: '["self-hosted", "macOS", "ephemeral"]'
       app_name:
         description: "Base filename for the IPA (no extension)"
         type: string

@@ -23,7 +23,7 @@ on:
       runner:
         description: 'JSON array of runner labels'
         type: string
-        default: '["self-hosted", "macOS", "olympus"]'
+        default: '["self-hosted", "macOS", "ephemeral"]'
       lint_dirs:
         description: "Space-separated directories to pass to gdformat/gdlint"
         type: string
