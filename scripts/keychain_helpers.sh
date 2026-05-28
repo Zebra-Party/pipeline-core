@@ -23,6 +23,7 @@ LOGIN_KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
 keychain_unique_path() {
     local prefix="${1:?prefix required}"
     local runner="${RUNNER_NAME:-$(hostname -s)}"
+    runner="${runner//[^a-zA-Z0-9._-]/-}"  # runner names with spaces break codesign's --keychain flag
     local run="${GITHUB_RUN_ID:-$$}"
     local attempt="${GITHUB_RUN_ATTEMPT:-1}"
     local rand
