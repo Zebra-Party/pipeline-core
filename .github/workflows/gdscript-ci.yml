@@ -43,7 +43,7 @@ on:
       screenshot_scene_glob:
         description: "Space-separated glob(s) passed to screenshot_scenes.sh as SCENE_GLOB — supports ** via globstar"
         type: string
-        default: "scenes/*.tscn"
+        default: "scenes/**/*.tscn"
 
 jobs:
   test:
@@ -56,9 +56,9 @@ jobs:
       SCENE_DIR: ${{ inputs.scene_dir }}
       TEST_PATTERN: ${{ inputs.test_pattern }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.3.1
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.3.1
         with:
           repository: Zebra-Party/pipeline-core
           ref: main
@@ -101,9 +101,9 @@ jobs:
       GODOT_VERSION: ${{ inputs.godot_version }}
       SCENE_GLOB: ${{ inputs.screenshot_scene_glob }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.3.1
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.3.1
         with:
           repository: Zebra-Party/pipeline-core
           ref: main

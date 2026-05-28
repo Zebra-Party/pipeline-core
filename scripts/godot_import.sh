@@ -10,6 +10,12 @@
 # survive a fresh `.godot/` cache on the runner — projects with a few
 # hundred assets need ~10s on macOS. Override with $GODOT_IMPORT_FRAMES
 # if a project needs more.
+#
+# A single retry is performed when the first pass exits cleanly but logs
+# "referenced non-existent resource" — a Godot 4.6 ordering quirk where
+# a .tres file that references a texture is parsed before that texture's
+# .ctex sidecar has been flushed. Reproducible on fresh .godot/ caches
+# when committed .import files exist but their .ctex targets do not yet.
 
 set -uo pipefail
 
@@ -28,6 +34,19 @@ echo "::endgroup::"
 if [ "$status" -ne 0 ]; then
 	echo "Godot reimport exited $status"
 	exit "$status"
+fi
+
+if grep -qiE "referenced non-existent resource" "$LOG"; then
+	echo "Import ordering race detected — retrying once…"
+	"$GODOT" --headless --editor --path . --quit-after "$FRAMES" > "$LOG" 2>&1
+	status=$?
+	echo "::group::Godot output — retry (last 40 lines)"
+	tail -40 "$LOG" || true
+	echo "::endgroup::"
+	if [ "$status" -ne 0 ]; then
+		echo "Godot reimport (retry) exited $status"
+		exit "$status"
+	fi
 fi
 
 if grep -iE "Parse Error|SCRIPT ERROR" "$LOG"; then

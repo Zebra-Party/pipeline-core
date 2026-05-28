@@ -74,11 +74,11 @@ jobs:
     env:
       APP_NAME: ${{ inputs.app_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.3.1
         with:
           fetch-depth: 0
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.3.1
         with:
           repository: Zebra-Party/pipeline-core
           ref: main
@@ -178,11 +178,11 @@ jobs:
     env:
       APP_NAME: ${{ inputs.app_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.3.1
         with:
           fetch-depth: 0
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.3.1
         with:
           repository: Zebra-Party/pipeline-core
           ref: main
@@ -283,11 +283,11 @@ jobs:
     env:
       APP_NAME: ${{ inputs.app_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.3.1
         with:
           fetch-depth: 0
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.3.1
         with:
           repository: Zebra-Party/pipeline-core
           ref: main
