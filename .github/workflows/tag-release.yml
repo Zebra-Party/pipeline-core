@@ -1,0 +1,66 @@
+name: Tag Release
+
+# Manually cut a semver release of pipeline-core.
+#
+# What this does:
+#   1. Creates a GitHub Release (and underlying git tag) at HEAD of main.
+#   2. Force-updates the floating major tag (e.g. v1) so callers pinned to
+#      "@v1" automatically receive the latest compatible version.
+#
+# Callers should pin to the floating major tag for automatic patch updates:
+#   uses: Zebra-Party/pipeline-core/.github/workflows/ios-release.yml@v1
+#
+# For a BREAKING change (new required inputs, removed outputs, changed
+# behaviour), bump the major version (v2) and update caller repos manually.
+#
+# Patch releases: run this workflow on main after cherry-picking the fix.
+# The floating tag follows automatically.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, e.g. 1.0.0 (without the v prefix)'
+        type: string
+        required: true
+      update_floating_tag:
+        description: 'Move the floating major tag (v1, v2, …) to this release'
+        type: boolean
+        default: true
+
+jobs:
+  release:
+    name: Tag v${{ inputs.version }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate version format
+        run: |
+          if ! printf '%s' "${{ inputs.version }}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Version must be in X.Y.Z format (no v prefix). Got: ${{ inputs.version }}"
+            exit 1
+          fi
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ inputs.version }}" \
+            --title "v${{ inputs.version }}" \
+            --generate-notes \
+            --latest
+          echo "Created release v${{ inputs.version }}"
+
+      - name: Update floating major tag
+        if: inputs.update_floating_tag
+        run: |
+          MAJOR="${{ inputs.version }}"
+          MAJOR="${MAJOR%%.*}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -fa "v${MAJOR}" -m "Update v${MAJOR} → v${{ inputs.version }}"
+          git push origin "v${MAJOR}" --force
+          echo "Moved floating tag v${MAJOR} → v${{ inputs.version }}"

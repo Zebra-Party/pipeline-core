@@ -5,7 +5,7 @@ name: GDScript CI
 #
 #   jobs:
 #     gdscript:
-#       uses: Zebra-Party/pipeline-core/.github/workflows/gdscript-ci.yml@main
+#       uses: Zebra-Party/pipeline-core/.github/workflows/gdscript-ci.yml@v1
 #       permissions:
 #         contents: write
 #         pull-requests: write
@@ -36,10 +36,6 @@ on:
         description: "Glob pattern for headless test scripts"
         type: string
         default: "test/_test_*.gd"
-      clean_checkout:
-        description: "Whether to clean the workspace before checkout (set false to preserve .godot/ cache)"
-        type: boolean
-        default: false
       pre_test_script:
         description: "Optional path to a project script to run before tests (e.g. tools/compile_scenes.sh)"
         type: string
@@ -61,8 +57,6 @@ jobs:
       TEST_PATTERN: ${{ inputs.test_pattern }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          clean: ${{ inputs.clean_checkout }}
 
       - uses: actions/checkout@v4
         with:
@@ -108,8 +102,6 @@ jobs:
       SCENE_GLOB: ${{ inputs.screenshot_scene_glob }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          clean: ${{ inputs.clean_checkout }}
 
       - uses: actions/checkout@v4
         with:

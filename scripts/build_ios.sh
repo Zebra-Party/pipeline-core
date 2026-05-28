@@ -22,7 +22,6 @@ APP_NAME="${APP_NAME:-export}"
 BUILD_DIR="${BUILD_DIR:-build/ios}"
 IPA_PATH="$BUILD_DIR/${APP_NAME}.ipa"
 
-rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
 echo "Xcode / signing environment:"
