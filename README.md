@@ -1,6 +1,6 @@
 # pipeline-core
 
-Shared GitHub Actions workflows and scripts for Godot 4 projects in the Zebra-Party org. Game repos call into these workflows via `workflow_call` — one place to fix a CI bug and every project picks it up.
+Shared GitHub Actions workflows and scripts for all Zebra-Party projects — Godot games, Flutter apps, and native Xcode (iOS/macOS/tvOS) builds. Consumer repos call into these workflows via `workflow_call` — one place to fix a CI bug and every project picks it up.
 
 ## How it works
 
