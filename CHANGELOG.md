@@ -7,6 +7,18 @@ behaviour) bump the major version.
 
 ---
 
+## [v1.0.1] — 2026-05-28
+
+### Fixed
+
+- Restored import-ordering retry in `godot_import.sh`. The retry was removed in
+  v1.0.0 on the assumption it only triggered with a warm `.godot/` cache, but it
+  also fires on fresh caches when committed `.import` sidecars exist but their
+  `.ctex` targets haven't been flushed yet — Godot 4.6 can parse a `.tres` theme
+  file that references a texture before that texture's import pass completes.
+
+---
+
 ## [v1.0.0] — 2026-05-28
 
 Initial versioned release. All workflows were previously consumed via `@main`.
@@ -19,8 +31,7 @@ Initial versioned release. All workflows were previously consumed via `@main`.
 - Removed `clean_checkout` input from `gdscript-ci.yml`, `ios-release.yml`, and
   `macos-release.yml` — the input was always `false` and is meaningless on
   ephemeral runners where every workspace is fresh.
-- Removed stale import-ordering retry in `godot_import.sh` (only triggered on
-  persistent runners with a warm `.godot/` cache).
+- Removed stale import-ordering retry in `godot_import.sh` (reverted in v1.0.1).
 - Removed `rm -rf "$BUILD_DIR"` from `build_ios.sh` (no-op on ephemeral runners).
 - Updated stale runner-name references in `select_xcode.sh` and comments.
 - Added `description:` to the `runner` input in `macos-release.yml` (parity
