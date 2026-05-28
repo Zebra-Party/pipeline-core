@@ -64,7 +64,7 @@ PROFILE_NAME="$(echo "$PROFILE_PLIST" | plutil -extract Name raw -)"
 TEAM_ID="$(echo "$PROFILE_PLIST" | plutil -extract TeamIdentifier.0 raw -)"
 PROFILE_APPID="$(echo "$PROFILE_PLIST" | plutil -extract Entitlements.application-identifier raw -)"
 # application-identifier is "<TEAMID>.<bundleid>" — strip the team prefix.
-PROFILE_BUNDLE_ID="${PROFILE_APPID#${TEAM_ID}.}"
+PROFILE_BUNDLE_ID="${PROFILE_APPID#"${TEAM_ID}".}"
 PRESET_BUNDLE_ID="$(grep -E '^application/bundle_identifier=' export_presets.cfg | head -1 | sed -E 's/.*"(.*)"/\1/')"
 
 PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"

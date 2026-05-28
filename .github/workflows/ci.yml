@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run shellcheck on all scripts
+        run: shellcheck -x --source-path=scripts scripts/*.sh
+
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Download actionlint
+        run: |
+          curl -sSfL \
+            "https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash" \
+            | bash -s -- -b /usr/local/bin
+      - name: Run actionlint on all workflows
+        run: actionlint .github/workflows/*.yml

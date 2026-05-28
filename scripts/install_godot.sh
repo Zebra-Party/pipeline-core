@@ -83,12 +83,14 @@ if [ "$needs_install" = "true" ]; then
 	python3 -m zipfile -e "$bin_dir/templates.tpz" "$bin_dir/templates_unpack/"
 	if [ ! -d "$bin_dir/templates_unpack/templates" ]; then
 		echo "::error::tpz layout unexpected — no top-level templates/ dir. Found:"
+		# shellcheck disable=SC2012
 		ls -la "$bin_dir/templates_unpack" || true
 		exit 1
 	fi
 	cp -R "$bin_dir/templates_unpack/templates/." "$templates_dir/"
 	rm -rf "$bin_dir/templates_unpack" "$bin_dir/templates.tpz"
 	echo "Installed templates:"
+	# shellcheck disable=SC2012
 	ls -la "$templates_dir" | sed 's/^/  /'
 fi
 

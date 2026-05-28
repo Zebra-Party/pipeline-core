@@ -117,7 +117,7 @@ if [ -z "$PROFILE_APPID" ]; then
     PROFILE_APPID="$(/usr/libexec/PlistBuddy -c 'Print Entitlements:com.apple.application-identifier' "$PLIST_FILE" 2>/dev/null || true)"
 fi
 if [ -n "$PROFILE_APPID" ]; then
-    BUNDLE_ID="${PROFILE_APPID#${TEAM_ID}.}"
+    BUNDLE_ID="${PROFILE_APPID#"${TEAM_ID}".}"
 else
     BUNDLE_ID="*"
 fi

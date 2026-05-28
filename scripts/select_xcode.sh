@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-XCODE=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1 || true)
+XCODE=$(find /Applications -maxdepth 1 -name "Xcode*.app" -type d 2>/dev/null | sort -V | tail -1 || true)
 
 if [ -z "$XCODE" ] || [ ! -d "$XCODE/Contents/Developer" ]; then
     echo "::error::No Xcode.app found under /Applications/. Install Xcode on this runner." >&2
