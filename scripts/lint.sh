@@ -36,14 +36,14 @@ GDLINT="$(command -v gdlint)"
 # accounts don't collide on a shared /tmp file.
 TMP_DIR="${RUNNER_TEMP:-/tmp}"
 
-# shellcheck disable=SC2086
 echo "::group::gdformat (check)"
+# shellcheck disable=SC2086  # LINT_DIRS is intentionally word-split into multiple path args
 "$GDFORMAT" --check $LINT_DIRS 2>&1 | tee "$TMP_DIR/gdformat.out"
 gdformat_status=${PIPESTATUS[0]}
 echo "::endgroup::"
 
-# shellcheck disable=SC2086
 echo "::group::gdlint"
+# shellcheck disable=SC2086  # LINT_DIRS is intentionally word-split into multiple path args
 "$GDLINT" $LINT_DIRS 2>&1 | tee "$TMP_DIR/gdlint.out"
 gdlint_status=${PIPESTATUS[0]}
 echo "::endgroup::"
