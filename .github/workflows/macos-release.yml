@@ -21,7 +21,7 @@ on:
         default: "4.6.2-stable"
       runner:
         type: string
-        default: '["self-hosted", "macOS", "olympus"]'
+        default: '["self-hosted", "macOS", "ephemeral"]'
       app_name:
         description: "Base filename for .app / .pkg (no extension)"
         type: string

@@ -50,7 +50,7 @@ on:
       runner:
         description: "JSON array of runner labels"
         type: string
-        default: '["self-hosted", "macOS", "olympus"]'
+        default: '["self-hosted", "macOS", "ephemeral"]'
       run_build_runner:
         description: "Run `dart run build_runner build` after `flutter pub get` (for projects using Drift, Freezed, etc.)"
         type: boolean
@@ -103,9 +103,8 @@ jobs:
       - name: Ensure CocoaPods
         # Flutter plugins ship their iOS native code as pods, so `flutter
         # build ios` invokes `pod install` and fails if pod isn't on PATH.
-        # The org's olympus runners don't have it pre-installed yet — the
-        # runner-onboarding script will be updated separately. Idempotent:
-        # `brew install` on an already-installed formula is a fast no-op.
+        # Ephemeral runners start from a fresh image each job; the check is
+        # a fast no-op when pod is already present in the runner image.
         run: |
           if ! command -v pod >/dev/null 2>&1; then
             brew install cocoapods
