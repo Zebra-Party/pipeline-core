@@ -81,7 +81,11 @@ jobs:
       - uses: actions/checkout@v6
         with:
           repository: Zebra-Party/pipeline-core
-          ref: ${{ github.workflow_sha }}
+          # Pin scripts to the major tag this workflow ships under. Do NOT use
+          # github.workflow_sha: in a reusable (workflow_call) context it resolves
+          # to the CALLER's commit, which is not a ref in this repo (broke every
+          # consumer release in #36). Bump this literal to v2 on the v2 branch.
+          ref: v1
           path: .pipeline-core
 
       - name: Select Xcode
@@ -185,7 +189,11 @@ jobs:
       - uses: actions/checkout@v6
         with:
           repository: Zebra-Party/pipeline-core
-          ref: ${{ github.workflow_sha }}
+          # Pin scripts to the major tag this workflow ships under. Do NOT use
+          # github.workflow_sha: in a reusable (workflow_call) context it resolves
+          # to the CALLER's commit, which is not a ref in this repo (broke every
+          # consumer release in #36). Bump this literal to v2 on the v2 branch.
+          ref: v1
           path: .pipeline-core
 
       - name: Select Xcode
@@ -290,7 +298,11 @@ jobs:
       - uses: actions/checkout@v6
         with:
           repository: Zebra-Party/pipeline-core
-          ref: ${{ github.workflow_sha }}
+          # Pin scripts to the major tag this workflow ships under. Do NOT use
+          # github.workflow_sha: in a reusable (workflow_call) context it resolves
+          # to the CALLER's commit, which is not a ref in this repo (broke every
+          # consumer release in #36). Bump this literal to v2 on the v2 branch.
+          ref: v1
           path: .pipeline-core
 
       - name: Select Xcode
