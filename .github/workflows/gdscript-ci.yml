@@ -69,7 +69,7 @@ jobs:
           # github.workflow_sha: in a reusable (workflow_call) context it resolves
           # to the CALLER's commit, which is not a ref in this repo (broke every
           # consumer release in #36). Bump this literal to v2 on the v2 branch.
-          ref: fix/screenshot-job-reimport
+          ref: v1
           path: .pipeline-core
 
       - name: Install Godot & export templates
@@ -120,7 +120,7 @@ jobs:
           # github.workflow_sha: in a reusable (workflow_call) context it resolves
           # to the CALLER's commit, which is not a ref in this repo (broke every
           # consumer release in #36). Bump this literal to v2 on the v2 branch.
-          ref: fix/screenshot-job-reimport
+          ref: v1
           path: .pipeline-core
 
       - name: Install Godot & export templates
@@ -129,23 +129,6 @@ jobs:
       - name: Pre-screenshot script
         if: inputs.pre_test_script != ''
         run: bash ${{ inputs.pre_test_script }}
-
-      # The harness runs Godot as a game (not the editor), which does NOT
-      # import resources on demand — it needs .godot/imported/ and the global
-      # class cache to already exist. This job runs on a fresh VM, so import
-      # here just like the test job does. (Previously masked: capture was
-      # skipped entirely on macOS, so this step was never reached.)
-      #
-      # godot_import.sh runs `--editor --quit-after`, which imports textures
-      # but does not reliably flush the global class cache to disk. The harness
-      # boots Godot as a game: its autoloads compile at startup and race the
-      # on-the-fly class scan, failing to resolve class_name globals. A full
-      # `--import` runs to completion and persists the cache, so the game boot
-      # loads it instead of re-scanning.
-      - name: Reimport project
-        run: |
-          bash .pipeline-core/scripts/godot_import.sh
-          "$GODOT" --headless --import --path .
 
       - name: Capture screenshots
         run: bash .pipeline-core/scripts/screenshot_scenes.sh
