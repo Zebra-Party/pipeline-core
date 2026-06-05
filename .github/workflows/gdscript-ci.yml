@@ -69,7 +69,7 @@ jobs:
           # github.workflow_sha: in a reusable (workflow_call) context it resolves
           # to the CALLER's commit, which is not a ref in this repo (broke every
           # consumer release in #36). Bump this literal to v2 on the v2 branch.
-          ref: v1
+          ref: fix/screenshot-job-reimport
           path: .pipeline-core
 
       - name: Install Godot & export templates
@@ -120,7 +120,7 @@ jobs:
           # github.workflow_sha: in a reusable (workflow_call) context it resolves
           # to the CALLER's commit, which is not a ref in this repo (broke every
           # consumer release in #36). Bump this literal to v2 on the v2 branch.
-          ref: v1
+          ref: fix/screenshot-job-reimport
           path: .pipeline-core
 
       - name: Install Godot & export templates
