@@ -40,6 +40,10 @@ on:
         description: "Optional path to a project script to run before tests (e.g. tools/compile_scenes.sh)"
         type: string
         default: ""
+      strict_tests:
+        description: "Fail a test that prints SCRIPT ERROR even if it exits 0 (catches swallowed false passes). Off by default; opt in once a repo's tests are error-clean."
+        type: boolean
+        default: false
       screenshot_scene_glob:
         description: "Space-separated glob(s) passed to screenshot_scenes.sh as SCENE_GLOB — supports ** via globstar"
         type: string
@@ -88,6 +92,8 @@ jobs:
         run: bash .pipeline-core/scripts/boot_scenes.sh
 
       - name: Run headless tests
+        env:
+          STRICT_SCRIPT_ERRORS: ${{ inputs.strict_tests && '1' || '0' }}
         run: bash .pipeline-core/scripts/run_tests.sh
 
   screenshots:
