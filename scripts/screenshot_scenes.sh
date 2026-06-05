@@ -21,50 +21,20 @@ GODOT="${GODOT:?GODOT env var not set — call install_godot.sh first}"
 OUT_DIR="${OUT_DIR:-build/screenshots}"
 SCENE_GLOB="${SCENE_GLOB:-scenes/*.tscn}"
 
-# Screenshot capture needs a real GL context. On Linux CI we synthesise one
-# with xvfb (X virtual framebuffer); the macOS Tart VM runners boot a full
-# desktop with a real display + GPU, so there we launch Godot directly with
-# no wrapper. The harness renders into an off-screen SubViewport either way,
-# so plain --headless (which disables rendering) is never used.
-PLATFORM="$(uname -s)"
-if [ "$PLATFORM" != "Darwin" ] && ! command -v xvfb-run >/dev/null 2>&1; then
-	echo "❌ xvfb-run not found on PATH — install xvfb on this Linux runner" >&2
+# Screenshot capture relies on xvfb (Linux X virtual framebuffer) to give
+# Godot a GL context without a real display. macOS doesn't ship xvfb and
+# we don't have an equivalent offscreen pipeline wired up for the olympus
+# fleet — skip with a warning rather than failing the whole run. CI for
+# the boot smoke tests + headless tests still runs; only the PR
+# screenshot diff is missing.
+if ! command -v xvfb-run >/dev/null 2>&1; then
+	if [ "$(uname -s)" = "Darwin" ]; then
+		echo "::warning::xvfb-run not available on macOS runners — skipping screenshot capture"
+		exit 0
+	fi
+	echo "❌ xvfb-run not found on PATH — install xvfb on this runner" >&2
 	exit 1
 fi
-
-# Render the screenshot harness for one scene × resolution, capturing all
-# output to $log_path. Linux wraps Godot in xvfb-run; macOS runs it directly.
-run_capture() {
-	local width="$1" height="$2" scene="$3" out_path="$4" log_path="$5"
-	if [ "$PLATFORM" = "Darwin" ]; then
-		"$GODOT" --rendering-driver opengl3 \
-			"--resolution" "${width}x${height}" \
-			res://tools/ci/screenshot_harness.tscn \
-			-- \
-			"--scene=res://$scene" \
-			"--out=$out_path" \
-			"--width=$width" \
-			"--height=$height" \
-			"${SEED_ARG[@]}" \
-			> "$log_path" 2>&1
-	else
-		# `-a` picks a free display so parallel jobs on the same runner
-		# don't collide on :99. `--resolution` is the reliable way to set the
-		# initial window size — DisplayServer.window_set_size at runtime under
-		# xvfb leaves the viewport render target at the project default.
-		xvfb-run -a --server-args="-screen 0 ${width}x${height}x24 +extension GLX +render -noreset" \
-			"$GODOT" --rendering-driver opengl3 \
-			"--resolution" "${width}x${height}" \
-			res://tools/ci/screenshot_harness.tscn \
-			-- \
-			"--scene=res://$scene" \
-			"--out=$out_path" \
-			"--width=$width" \
-			"--height=$height" \
-			"${SEED_ARG[@]}" \
-			> "$log_path" 2>&1
-	fi
-}
 
 # device_slug:width:height — override via $SCREENSHOT_DEVICES (comma-
 # separated). Defaults are two aspect ratios × portrait/landscape,
@@ -108,7 +78,22 @@ for scene in $SCENE_GLOB; do
 		mkdir -p "$(dirname "$out_path")"
 
 		echo "::group::Screenshot $scene_name @ $device (${width}x${height})"
-		if run_capture "$width" "$height" "$scene" "$out_path" "$log_path"; then
+		# `-a` picks a free display so parallel jobs on the same runner
+		# don't collide on :99. `--resolution` is the reliable way to
+		# set the initial window size — `DisplayServer.window_set_size`
+		# at runtime under xvfb leaves the viewport render target at
+		# the project's configured default.
+		if xvfb-run -a --server-args="-screen 0 ${width}x${height}x24 +extension GLX +render -noreset" \
+			"$GODOT" --rendering-driver opengl3 \
+			"--resolution" "${width}x${height}" \
+			res://tools/ci/screenshot_harness.tscn \
+			-- \
+			"--scene=res://$scene" \
+			"--out=$out_path" \
+			"--width=$width" \
+			"--height=$height" \
+			"${SEED_ARG[@]}" \
+			> "$log_path" 2>&1; then
 			if [ -f "$out_path" ]; then
 				# Verify the PNG has the right dimensions — Godot exits
 				# 0 even on a blank capture, so we check the written
