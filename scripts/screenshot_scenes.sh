@@ -135,6 +135,16 @@ for scene in $SCENE_GLOB; do
 done
 
 if [ "$failures" -gt 0 ]; then
+	# The PR screenshot gallery is a nice-to-have diff, not a merge gate, and
+	# macOS capture is still best-effort: booting the project as a game trips
+	# Godot's class_name registration order on a fresh import for some projects
+	# (autoloads compile before all class_name globals are registered). Don't
+	# fail the job there — warn so it's visible but never blocks a PR. Linux
+	# (xvfb) stays strict so genuine regressions are caught.
+	if [ "$PLATFORM" = "Darwin" ]; then
+		echo "::warning::$failures screenshot(s) failed on macOS — capture is best-effort on this fleet; not blocking CI"
+		exit 0
+	fi
 	echo "$failures screenshot(s) failed" >&2
 	exit 1
 fi
