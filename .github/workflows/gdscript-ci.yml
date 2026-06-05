@@ -130,6 +130,14 @@ jobs:
         if: inputs.pre_test_script != ''
         run: bash ${{ inputs.pre_test_script }}
 
+      # The harness runs Godot as a game (not the editor), which does NOT
+      # import resources on demand — it needs .godot/imported/ and the global
+      # class cache to already exist. This job runs on a fresh VM, so import
+      # here just like the test job does. (Previously masked: capture was
+      # skipped entirely on macOS, so this step was never reached.)
+      - name: Reimport project
+        run: bash .pipeline-core/scripts/godot_import.sh
+
       - name: Capture screenshots
         run: bash .pipeline-core/scripts/screenshot_scenes.sh
 
