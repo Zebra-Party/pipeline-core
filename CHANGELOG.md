@@ -7,6 +7,20 @@ behaviour) bump the major version.
 
 ---
 
+## [v1.0.2] — 2026-06-06
+
+### Fixed
+
+- `upload_ios.sh` / `upload_tvos.sh` now retry `altool --upload-app` up to 3×
+  on transient failures — "network connection was lost (-1005)" and the
+  "Unable to authenticate (-19209)/401" seen when a slow upload outlives
+  altool's per-invocation JWT (observed on tvOS, where ingestion can run long
+  enough to expire the token mid-transfer). A fresh altool call mints a new
+  token, so a clean retry clears both. Genuine validation rejections
+  (`UPLOAD FAILED` with 90xxx asset/metadata errors) still fail fast.
+
+---
+
 ## [v1.0.1] — 2026-05-28
 
 ### Fixed

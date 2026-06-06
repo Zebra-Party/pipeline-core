@@ -20,16 +20,48 @@ chmod 600 "$KEY_PATH"
 ALTOOL_LOG=$(mktemp /tmp/altool-output.XXXXXX)
 trap 'rm -f "$ALTOOL_LOG" "$KEY_PATH"' EXIT
 
-echo "::group::altool upload"
-xcrun altool --upload-app \
-	--type ios \
-	--file "$IPA_PATH" \
-	--apiKey "$APP_STORE_CONNECT_KEY_ID" \
-	--apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" 2>&1 | tee "$ALTOOL_LOG"
-echo "::endgroup::"
+# Retry on transient upload failures (network drops, JWT expiry mid-upload
+# surfacing as 401/-19209). Each altool invocation mints a fresh token, so a
+# clean re-run clears those. Fail fast on a real validation rejection.
+attempt=1
+max_attempts=3
+RETRYABLE='network connection was lost|-1005|Unable to authenticate|-19209|status code 401|timed out|The request timed out|try again later|temporarily unavailable'
+while :; do
+    echo "::group::altool upload attempt ${attempt}/${max_attempts}"
+    : > "$ALTOOL_LOG"
+    set +e
+    xcrun altool --upload-app \
+        --type ios \
+        --file "$IPA_PATH" \
+        --apiKey "$APP_STORE_CONNECT_KEY_ID" \
+        --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" 2>&1 | tee "$ALTOOL_LOG"
+    rc=${PIPESTATUS[0]}
+    set -e
+    echo "::endgroup::"
 
-# altool can exit 0 even when upload fails; check output explicitly.
-if grep -q "UPLOAD FAILED" "$ALTOOL_LOG"; then
-    echo "::error::altool reported UPLOAD FAILED — see log above"
+    if [ "$rc" -eq 0 ] && ! grep -q "UPLOAD FAILED" "$ALTOOL_LOG"; then
+        echo "iOS upload succeeded."
+        exit 0
+    fi
+
+    if grep -qE "UPLOAD FAILED with [0-9]+ error" "$ALTOOL_LOG" \
+       && ! grep -qiE "$RETRYABLE" "$ALTOOL_LOG"; then
+        echo "::error::altool reported a non-retryable UPLOAD FAILED — see log above"
+        exit 1
+    fi
+
+    if [ "$attempt" -ge "$max_attempts" ]; then
+        echo "::error::altool upload failed after ${attempt} attempts — see log above"
+        exit 1
+    fi
+
+    if grep -qiE "$RETRYABLE" "$ALTOOL_LOG"; then
+        echo "::warning::Transient upload failure on attempt ${attempt}; retrying in 20s"
+        attempt=$((attempt + 1))
+        sleep 20
+        continue
+    fi
+
+    echo "::error::altool upload failed (exit ${rc}) — see log above"
     exit 1
-fi
+done
