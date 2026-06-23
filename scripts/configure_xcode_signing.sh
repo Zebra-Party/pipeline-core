@@ -133,6 +133,33 @@ echo "  Profile : $PROFILE_NAME ($PROFILE_UUID)"
 echo "  Team ID : $TEAM_ID"
 echo "  Bundle  : $BUNDLE_ID"
 
+# Optional second provisioning profile for an embedded app extension
+# (e.g. a Live Activity / widget extension), whose bundle id differs from
+# the host app's. When provided we install it alongside the app profile and
+# add it to ExportOptions, so a multi-target archive can sign each bundle id
+# with its own profile. Apps without an extension don't set this var, so
+# their signing is unchanged.
+EXTRA_PROVISIONING_PROFILES_XML=""
+EXTENSION_PROFILE_PRESENT=""
+if [ -n "${APPLE_EXTENSION_PROVISION:-}" ]; then
+    EXT_PROFILE_PATH="$WORK_DIR/profile-${PLATFORM}-ext.${PROFILE_EXT}"
+    echo "$APPLE_EXTENSION_PROVISION" | base64 --decode > "$EXT_PROFILE_PATH"
+    EXT_PLIST="$(security cms -D -i "$EXT_PROFILE_PATH")"
+    EXT_PROFILE_UUID="$(echo "$EXT_PLIST" | plutil -extract UUID raw -)"
+    EXT_PLIST_FILE="$WORK_DIR/profile-${PLATFORM}-ext.plist"
+    echo "$EXT_PLIST" > "$EXT_PLIST_FILE"
+    EXT_PROFILE_APPID="$(/usr/libexec/PlistBuddy -c 'Print Entitlements:application-identifier' "$EXT_PLIST_FILE" 2>/dev/null || true)"
+    if [ -z "$EXT_PROFILE_APPID" ]; then
+        EXT_PROFILE_APPID="$(/usr/libexec/PlistBuddy -c 'Print Entitlements:com.apple.application-identifier' "$EXT_PLIST_FILE" 2>/dev/null || true)"
+    fi
+    EXT_BUNDLE_ID="${EXT_PROFILE_APPID#"${TEAM_ID}".}"
+    cp "$EXT_PROFILE_PATH" "$PROFILE_DIR/${EXT_PROFILE_UUID}.${PROFILE_EXT}"
+    EXTRA_PROVISIONING_PROFILES_XML="        <key>${EXT_BUNDLE_ID}</key>
+        <string>${EXT_PROFILE_UUID}</string>"
+    EXTENSION_PROFILE_PRESENT=1
+    echo "  Extension profile: $EXT_BUNDLE_ID ($EXT_PROFILE_UUID)"
+fi
+
 # Write ExportOptions.plist so xcodebuild -exportArchive can consume it.
 EXPORT_OPTIONS_PATH="${EXPORT_OPTIONS_PATH:-build/ExportOptions-${PLATFORM}.plist}"
 mkdir -p "$(dirname "$EXPORT_OPTIONS_PATH")"
@@ -172,6 +199,7 @@ ${MACOS_EXTRA_KEYS}
     <dict>
         <key>${BUNDLE_ID}</key>
         <string>${PROFILE_UUID}</string>
+${EXTRA_PROVISIONING_PROFILES_XML}
     </dict>
 </dict>
 </plist>
@@ -189,5 +217,9 @@ if [ -n "${GITHUB_ENV:-}" ]; then
         echo "PROVISIONING_PROFILE_UUID_${PLATFORM_UPPER}=${PROFILE_UUID}"
         echo "EXPORT_OPTIONS_PATH_${PLATFORM_UPPER}=${EXPORT_OPTIONS_PATH}"
         echo "INSTALLED_PROVISIONING_PROFILE=${INSTALLED_PROFILE}"
+        # Signals build_xcode.sh to let Xcode match installed profiles
+        # per-target (rather than forcing one profile across all targets),
+        # which is required to sign an app + its embedded extension.
+        [ -n "$EXTENSION_PROFILE_PRESENT" ] && echo "EXTENSION_PROFILE_PRESENT_${PLATFORM_UPPER}=1"
     } >> "$GITHUB_ENV"
 fi
