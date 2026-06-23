@@ -55,6 +55,11 @@ on:
         required: false
       APPLE_IOS_PROVISION:
         required: false
+      # Optional: a second iOS provisioning profile for an embedded app
+      # extension (e.g. a widget / Live Activity extension) whose bundle id
+      # differs from the host app. Only needed by apps that ship one.
+      APPLE_IOS_EXTENSION_PROVISION:
+        required: false
       APPLE_MACOS_PROVISION:
         required: false
       APPLE_TVOS_PROVISION:
@@ -119,6 +124,8 @@ jobs:
           APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_DISTRIBUTION_PROVISION: ${{ secrets.APPLE_IOS_PROVISION }}
+          # Optional embedded-extension profile; empty for apps without one.
+          APPLE_EXTENSION_PROVISION: ${{ secrets.APPLE_IOS_EXTENSION_PROVISION }}
           PLATFORM: ios
         run: bash .pipeline-core/scripts/configure_xcode_signing.sh
 

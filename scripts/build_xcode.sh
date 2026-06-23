@@ -90,7 +90,17 @@ SIGNING_ARGS=(
     # list when invoked as an xcodebuild subprocess.
     OTHER_CODE_SIGN_FLAGS="--keychain ${KEYCHAIN_PATH}"
 )
-[ -n "$PROFILE_UUID" ] && SIGNING_ARGS+=(PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID")
+# When an embedded extension has its own provisioning profile (set by
+# configure_xcode_signing.sh from APPLE_EXTENSION_PROVISION), we must NOT
+# pin a single PROVISIONING_PROFILE_SPECIFIER across the whole build — that
+# would force the app's profile onto the extension's (different) bundle id
+# and fail the archive. Instead both profiles are installed and Xcode
+# matches each target to its profile by bundle id under manual signing.
+# Single-target apps keep the explicit specifier (unchanged behaviour).
+EXT_PRESENT_VAR="EXTENSION_PROFILE_PRESENT_${PLATFORM_UPPER}"
+if [ -n "$PROFILE_UUID" ] && [ -z "${!EXT_PRESENT_VAR:-}" ]; then
+    SIGNING_ARGS+=(PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID")
+fi
 
 # xcodebuild archive with a small retry on transient codesign failures.
 # `errSecInternalComponent` from codesign during archive (and the
