@@ -220,6 +220,14 @@ if [ -n "${GITHUB_ENV:-}" ]; then
         # Signals build_xcode.sh to let Xcode match installed profiles
         # per-target (rather than forcing one profile across all targets),
         # which is required to sign an app + its embedded extension.
-        [ -n "$EXTENSION_PROFILE_PRESENT" ] && echo "EXTENSION_PROFILE_PRESENT_${PLATFORM_UPPER}=1"
+        # NB: must be `if/fi`, not `[ -n … ] && echo`. This is the last
+        # command in the brace group (hence in the `if`, hence in the whole
+        # script). For an app WITHOUT an extension the var is empty, so a
+        # `&& echo` short-circuits to exit 1 — which becomes the script's
+        # exit status and fails the signing step for every extension-less
+        # app. `if/fi` yields 0 when the condition is false.
+        if [ -n "$EXTENSION_PROFILE_PRESENT" ]; then
+            echo "EXTENSION_PROFILE_PRESENT_${PLATFORM_UPPER}=1"
+        fi
     } >> "$GITHUB_ENV"
 fi
