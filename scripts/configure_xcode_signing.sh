@@ -133,20 +133,29 @@ echo "  Profile : $PROFILE_NAME ($PROFILE_UUID)"
 echo "  Team ID : $TEAM_ID"
 echo "  Bundle  : $BUNDLE_ID"
 
-# Optional second provisioning profile for an embedded app extension
-# (e.g. a Live Activity / widget extension), whose bundle id differs from
-# the host app's. When provided we install it alongside the app profile and
-# add it to ExportOptions, so a multi-target archive can sign each bundle id
-# with its own profile. Apps without an extension don't set this var, so
-# their signing is unchanged.
+# Optional provisioning profiles for embedded targets (a Live Activity / widget
+# extension, an embedded watchOS app, …) whose bundle ids differ from the host
+# app's. Each provided profile is installed alongside the app profile and added
+# to ExportOptions, so a multi-target archive signs each bundle id with its own
+# profile. Apps without embedded targets set none of these, so their signing is
+# unchanged.
+#
+# APPLE_EXTENSION_PROVISION is the original single-extension var (kept for
+# back-compat); APPLE_EXTENSION_PROVISION_2 / _3 add further embedded targets
+# (e.g. an app with both a widget AND a watch app). Each profile's bundle id is
+# read from the profile itself, so the order is irrelevant.
 EXTRA_PROVISIONING_PROFILES_XML=""
 EXTENSION_PROFILE_PRESENT=""
-if [ -n "${APPLE_EXTENSION_PROVISION:-}" ]; then
-    EXT_PROFILE_PATH="$WORK_DIR/profile-${PLATFORM}-ext.${PROFILE_EXT}"
-    echo "$APPLE_EXTENSION_PROVISION" | base64 --decode > "$EXT_PROFILE_PATH"
+ext_count=0
+for ext_var in APPLE_EXTENSION_PROVISION APPLE_EXTENSION_PROVISION_2 APPLE_EXTENSION_PROVISION_3; do
+    ext_b64="${!ext_var:-}"
+    [ -z "$ext_b64" ] && continue
+    ext_count=$((ext_count + 1))
+    EXT_PROFILE_PATH="$WORK_DIR/profile-${PLATFORM}-ext${ext_count}.${PROFILE_EXT}"
+    echo "$ext_b64" | base64 --decode > "$EXT_PROFILE_PATH"
     EXT_PLIST="$(security cms -D -i "$EXT_PROFILE_PATH")"
     EXT_PROFILE_UUID="$(echo "$EXT_PLIST" | plutil -extract UUID raw -)"
-    EXT_PLIST_FILE="$WORK_DIR/profile-${PLATFORM}-ext.plist"
+    EXT_PLIST_FILE="$WORK_DIR/profile-${PLATFORM}-ext${ext_count}.plist"
     echo "$EXT_PLIST" > "$EXT_PLIST_FILE"
     EXT_PROFILE_APPID="$(/usr/libexec/PlistBuddy -c 'Print Entitlements:application-identifier' "$EXT_PLIST_FILE" 2>/dev/null || true)"
     if [ -z "$EXT_PROFILE_APPID" ]; then
@@ -154,11 +163,12 @@ if [ -n "${APPLE_EXTENSION_PROVISION:-}" ]; then
     fi
     EXT_BUNDLE_ID="${EXT_PROFILE_APPID#"${TEAM_ID}".}"
     cp "$EXT_PROFILE_PATH" "$PROFILE_DIR/${EXT_PROFILE_UUID}.${PROFILE_EXT}"
-    EXTRA_PROVISIONING_PROFILES_XML="        <key>${EXT_BUNDLE_ID}</key>
-        <string>${EXT_PROFILE_UUID}</string>"
+    EXTRA_PROVISIONING_PROFILES_XML="${EXTRA_PROVISIONING_PROFILES_XML}        <key>${EXT_BUNDLE_ID}</key>
+        <string>${EXT_PROFILE_UUID}</string>
+"
     EXTENSION_PROFILE_PRESENT=1
-    echo "  Extension profile: $EXT_BUNDLE_ID ($EXT_PROFILE_UUID)"
-fi
+    echo "  Embedded-target profile ${ext_count} ($ext_var): $EXT_BUNDLE_ID ($EXT_PROFILE_UUID)"
+done
 
 # Write ExportOptions.plist so xcodebuild -exportArchive can consume it.
 EXPORT_OPTIONS_PATH="${EXPORT_OPTIONS_PATH:-build/ExportOptions-${PLATFORM}.plist}"
