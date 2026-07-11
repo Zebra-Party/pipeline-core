@@ -31,7 +31,7 @@ job uses (self-hosted runners are long-lived machines, not per-job images). For 
 
 | Job | Host must provide |
 |---|---|
-| Godot Android export | a Godot **Windows** editor binary + Android export templates, plus an Android SDK/JDK. `install_godot.sh` is macOS/Linux-only, so bake Godot onto the host or install it in a Windows-aware step. |
+| Godot Android export | an Android SDK/JDK on the host. `install_godot.sh` handles the Godot editor + export templates on Windows too (downloads the `win64` build, or picks up a pre-baked one via `$GODOT_HOME`); on a persistent host, bake Godot once so it's a no-op per job. |
 | Swift build / test | a Swift toolchain for Windows |
 | .NET / Flutter / Android | the respective SDK on `PATH` |
 
