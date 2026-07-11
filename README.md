@@ -28,6 +28,12 @@ Updating a script or workflow here takes effect on the next run in every consume
 | `xcode-release.yml` | Native Xcode (iOS/macOS/tvOS) — code-sign + TestFlight upload | — |
 | `flutter-ios-release.yml` | Flutter iOS — code-sign IPA, upload to TestFlight | [docs/flutter-ios-release.md](docs/flutter-ios-release.md) |
 
+## Runners
+
+Every workflow takes a **`runner`** input (JSON array of labels), defaulting to the org's
+ephemeral macOS pool. Non-Apple jobs can be routed to a **self-hosted Windows runner** by
+overriding it — see [docs/windows-runners.md](docs/windows-runners.md).
+
 ## Quick start
 
 A typical game repo needs two workflow files. Adjust `godot_version`, `lint_dirs`, `scene_dir`, and `app_name` for the project.
