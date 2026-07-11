@@ -15,10 +15,14 @@ GODOT_VERSION="${1:-${GODOT_VERSION:-4.6.2-stable}}"
 GODOT_HOME="${GODOT_HOME:-${RUNNER_TOOL_CACHE:-$HOME/.cache}/godot}"
 mkdir -p "$GODOT_HOME"
 
+# Git Bash on Windows ships `python`, not `python3`; the macOS/Linux runners have python3.
+PY="python3"; command -v "$PY" >/dev/null 2>&1 || PY="python"
+
 OS_KIND=""
 case "$(uname -s)" in
 	Darwin) OS_KIND="macos" ;;
 	Linux) OS_KIND="linux" ;;
+	MINGW*|MSYS*|CYGWIN*) OS_KIND="windows" ;;
 	*) echo "Unsupported OS: $(uname -s)" >&2; exit 1 ;;
 esac
 
@@ -33,7 +37,7 @@ case "$OS_KIND" in
 			echo "Downloading Godot $GODOT_VERSION (macOS)…"
 			curl -fsSL -o "$bin_dir/godot.zip" \
 				"https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_macos.universal.zip"
-			python3 -m zipfile -e "$bin_dir/godot.zip" "$bin_dir/"
+			"$PY" -m zipfile -e "$bin_dir/godot.zip" "$bin_dir/"
 			rm "$bin_dir/godot.zip"
 			# Python's zipfile module drops Unix permission bits on extract,
 			# so the inner binary is non-executable; restore it.
@@ -49,9 +53,22 @@ case "$OS_KIND" in
 			echo "Downloading Godot $GODOT_VERSION (Linux headless)…"
 			curl -fsSL -o "$bin_dir/godot.zip" \
 				"https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
-			python3 -m zipfile -e "$bin_dir/godot.zip" "$bin_dir/"
+			"$PY" -m zipfile -e "$bin_dir/godot.zip" "$bin_dir/"
 			mv "$bin_dir/Godot_v${GODOT_VERSION}_linux.x86_64" "$godot_path"
 			chmod +x "$godot_path"
+			rm "$bin_dir/godot.zip"
+		fi
+		;;
+	windows)
+		# The standard Windows editor exe is headless-capable via --headless. On the
+		# self-hosted Windows host it's usually pre-baked (setup_runner_windows.ps1
+		# -InstallGodot sets $GODOT_HOME), so this download is a no-op.
+		godot_path="$bin_dir/Godot_v${GODOT_VERSION}_win64.exe"
+		if [ ! -f "$godot_path" ]; then
+			echo "Downloading Godot $GODOT_VERSION (Windows)…"
+			curl -fsSL -o "$bin_dir/godot.zip" \
+				"https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_win64.exe.zip"
+			"$PY" -m zipfile -e "$bin_dir/godot.zip" "$bin_dir/"
 			rm "$bin_dir/godot.zip"
 		fi
 		;;
@@ -62,6 +79,7 @@ templates_dir=""
 case "$OS_KIND" in
 	macos) templates_dir="$HOME/Library/Application Support/Godot/export_templates/${GODOT_VERSION/-stable/.stable}" ;;
 	linux) templates_dir="$HOME/.local/share/godot/export_templates/${GODOT_VERSION/-stable/.stable}" ;;
+	windows) templates_dir="${APPDATA:-$HOME/AppData/Roaming}/Godot/export_templates/${GODOT_VERSION/-stable/.stable}" ;;
 esac
 # Re-extract if the dir is missing entirely OR if it exists but is missing
 # a key per-platform file — earlier runs sometimes left a partial install
@@ -80,7 +98,7 @@ if [ "$needs_install" = "true" ]; then
 	curl -fsSL -o "$bin_dir/templates.tpz" \
 		"https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz"
 	rm -rf "$bin_dir/templates_unpack"
-	python3 -m zipfile -e "$bin_dir/templates.tpz" "$bin_dir/templates_unpack/"
+	"$PY" -m zipfile -e "$bin_dir/templates.tpz" "$bin_dir/templates_unpack/"
 	if [ ! -d "$bin_dir/templates_unpack/templates" ]; then
 		echo "::error::tpz layout unexpected — no top-level templates/ dir. Found:"
 		# shellcheck disable=SC2012
