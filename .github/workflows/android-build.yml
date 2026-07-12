@@ -167,8 +167,14 @@ jobs:
           set -euo pipefail
           perl -pi -e 's|^gradle_build/use_gradle_build=true|gradle_build/use_gradle_build=false|' export_presets.cfg
           perl -pi -e 's|^gradle_build/export_format=1|gradle_build/export_format=0|' export_presets.cfg
+          # Godot rejects min/target SDK overrides unless gradle build is on
+          # ('"Min SDK" can only be overridden when "Use Gradle Build" is
+          # enabled'), so clear them alongside it. Empty = use the export
+          # template's defaults.
+          perl -pi -e 's|^gradle_build/min_sdk=.*|gradle_build/min_sdk=""|' export_presets.cfg
+          perl -pi -e 's|^gradle_build/target_sdk=.*|gradle_build/target_sdk=""|' export_presets.cfg
           echo "--- gradle settings now:"
-          grep -E '^gradle_build/(use_gradle_build|export_format)' export_presets.cfg
+          grep -E '^gradle_build/(use_gradle_build|export_format|min_sdk|target_sdk)' export_presets.cfg
           if grep -q '^gradle_build/use_gradle_build=true' export_presets.cfg; then
             echo "::error::Failed to disable gradle_build — the export would fail asking for the build template."
             exit 1
