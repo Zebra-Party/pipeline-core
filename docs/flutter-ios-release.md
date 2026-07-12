@@ -2,7 +2,7 @@
 
 **File:** `.github/workflows/flutter-ios-release.yml`
 
-Builds a signed IPA from a Flutter project and uploads it to TestFlight. Mirrors the secret names and skip-when-absent behaviour of [`xcode-release.yml`](ios-release.md), so a Flutter app and a native Xcode app can sit side by side in the org without their callers diverging.
+Builds a signed IPA from a Flutter project and uploads it to TestFlight. Mirrors the secret names and skip-when-absent behaviour of [`xcode-release.yml`](xcode-release.md), so a Flutter app and a native Xcode app can sit side by side in the org without their callers diverging.
 
 ## Why not `flutter build ipa`?
 
@@ -17,7 +17,7 @@ Builds a signed IPA from a Flutter project and uploads it to TestFlight. Mirrors
 | `flutter_org` | string | _(required)_ | Reverse-DNS org prefix for the bundle ID. Passed to `flutter create --org`. |
 | `bundle_id` | string | _(empty)_ | Optional override of the iOS bundle ID. Set when the desired ID isn't `<flutter_org>.<lowerCamelCase(flutter_project_name)>`. Passes `PRODUCT_BUNDLE_IDENTIFIER` to xcodebuild. |
 | `flutter_version` | string | `3.41.x` | Flutter SDK version (`subosito/flutter-action` format). |
-| `runner` | string | `["self-hosted","macOS","olympus"]` | JSON array of runner labels. Must be macOS. |
+| `runner` | string | `["self-hosted","macOS","ephemeral"]` | JSON array of runner labels. Must be macOS. |
 | `run_build_runner` | boolean | `true` | Run `dart run build_runner build --delete-conflicting-outputs` after `flutter pub get`. Set to `false` for projects without code generators (Drift, Freezed, json_serializable, etc.). |
 | `upload_to_testflight` | boolean | `true` | Upload to TestFlight when on `main`. Build still runs on PRs. |
 
@@ -60,4 +60,5 @@ If any are missing the upload step is skipped with a warning; the IPA is still b
 | Configure signing | `configure_xcode_signing.sh` | Imports the cert into a fresh keychain, installs the profile, writes `ExportOptions.plist`, exports `KEYCHAIN_PATH` / `TEAM_ID` / `PROVISIONING_PROFILE_UUID_IOS` / `EXPORT_OPTIONS_PATH_IOS`. |
 | Build IPA | `build_flutter_ios.sh` | `flutter build ios --no-codesign` then `xcodebuild archive` + `xcodebuild -exportArchive` against `ios/Runner.xcworkspace` with manual signing. Outputs `IPA_PATH`. |
 | Upload to TestFlight | `upload_ios.sh` | Only on pushes to `main`. Uses `xcrun altool` with the App Store Connect API key. |
+| Tag release | _(inline)_ | Creates a GitHub Release `v{version}` in the calling repo (`gh release create --generate-notes --latest`). Only on `main`, never on PRs, and skipped if the release already exists. See [versioning.md](versioning.md). |
 | Clean up | `keychain_destroy` + `rm` | Destroys the per-job keychain and removes the installed `.mobileprovision`. |

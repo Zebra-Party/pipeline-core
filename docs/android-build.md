@@ -47,7 +47,7 @@ on:
 
 jobs:
   android:
-    uses: Zebra-Party/pipeline-core/.github/workflows/android-build.yml@main
+    uses: Zebra-Party/pipeline-core/.github/workflows/android-build.yml@v1
     with:
       godot_version: "4.6.2-stable"
       app_name: "MyGame"
@@ -59,7 +59,7 @@ With a pre-export code generation step and a custom preset name:
 ```yaml
 jobs:
   android:
-    uses: Zebra-Party/pipeline-core/.github/workflows/android-build.yml@main
+    uses: Zebra-Party/pipeline-core/.github/workflows/android-build.yml@v1
     with:
       godot_version: "4.6.2-stable"
       app_name: "MyGame"

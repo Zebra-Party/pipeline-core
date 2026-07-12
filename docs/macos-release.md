@@ -9,12 +9,11 @@ Builds a signed `.app` and `.pkg` via Godot's macOS exporter and uploads to Test
 | Input | Type | Default | Description |
 |---|---|---|---|
 | `godot_version` | string | `4.6.2-stable` | Godot release to use. |
-| `runner` | string | `["self-hosted","macOS","X64"]` | JSON array of runner labels. Must be macOS. |
+| `runner` | string | `["self-hosted","macOS","ephemeral"]` | JSON array of runner labels. Must be macOS. |
 | `app_name` | string | `export` | Base filename for the `.app` and `.pkg` (no extension). |
 | `macos_preset` | string | `macOS (Universal)` | Name of the Godot export preset to use. Must match exactly what's in `export_presets.cfg`. |
 | `upload_to_testflight` | boolean | `true` | Whether to upload the `.pkg` to TestFlight. Only runs on `main`, never on PRs. |
 | `pre_export_script` | string | _(empty)_ | Optional shell script to run after signing is configured but before Godot exports. |
-| `clean_checkout` | boolean | `false` | Wipe workspace before checkout. |
 
 ## Secrets
 
@@ -56,6 +55,7 @@ If either `APPLE_CERTIFICATE_P12_BASE64` or `APPLE_MACOS_DISTRIBUTION_PROVISION`
 | Pre-export script | _(your script)_ | Only runs if `pre_export_script` is set and signing was not skipped. |
 | Build .app + .pkg | `build_macos.sh` | Calls `godot --export-release` with the macOS preset. Unwraps the `.zip` that Godot may produce instead of a bare `.app`. Embeds the provisioning profile, re-signs with `codesign --force --options runtime --timestamp`, then calls `productbuild` to create the `.pkg`. If the Mac Installer cert is present, the `.pkg` is signed; otherwise it is unsigned (and a warning is printed). |
 | Upload to TestFlight | `upload_macos.sh` | Uses `xcrun altool --upload-app --type macos`. Only runs on `main`. |
+| Tag release | _(inline)_ | Creates a GitHub Release `v{version}` in the **calling repo** via `gh release create --generate-notes --latest`, using the version from `compute_version.sh`. Only runs on `main` (never on PRs) and only if signing wasn't skipped. Idempotent: skips if the release already exists, so an iOS and a macOS job on the same commit don't collide. See [versioning.md](versioning.md). |
 | Clean up keychain | _(inline)_ | Always runs. Restores the login keychain as default and deletes the temporary keychain. |
 | Restore presets | _(inline)_ | Always runs. Reverts `export_presets.cfg` to its committed state. |
 
@@ -72,7 +72,7 @@ on:
 jobs:
   macos:
     if: github.actor != 'dependabot[bot]'
-    uses: Zebra-Party/pipeline-core/.github/workflows/macos-release.yml@main
+    uses: Zebra-Party/pipeline-core/.github/workflows/macos-release.yml@v1
     with:
       godot_version: "4.6.2-stable"
       app_name: "MyGame"
