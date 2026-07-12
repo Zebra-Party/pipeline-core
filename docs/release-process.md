@@ -125,9 +125,14 @@ asking Apple to review it is a separate App Store Connect API call
 (`appStoreVersionSubmissions`), which could live next to `upload_ios.sh` as a
 tag-triggered step.
 
-### Android release
+### Android — Play Store publishing
 
-`android-build.yml` produces an **unsigned debug APK** as a workflow artifact —
-a smoke test that the project exports, nothing more. Release signing and Play
-Store publishing are not implemented; that needs Play Console setup and an
-upload key first.
+`android-build.yml` produces a **debug-signed APK** and, with
+`attach_to_release: true`, attaches it to the GitHub Release. Debug signing is
+deliberate: it is what makes the APK **sideloadable**, so it is a real
+downloadable build, not just a smoke test. (An unsigned APK would not install at
+all.)
+
+What is *not* implemented is **Play Store** publishing: that needs a release
+upload keystore and Play Console setup. Until then, the GitHub Release is the
+distribution channel.
