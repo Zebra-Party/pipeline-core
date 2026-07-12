@@ -91,6 +91,25 @@ jobs:
       - name: Install Godot
         run: bash .pipeline-core/scripts/install_godot.sh "$GODOT_VERSION"
 
+      # A debug export is signed with the Android debug keystore. A fresh CI
+      # runner has no ~/.android/debug.keystore, and without one Godot fails the
+      # export with an unhelpful bare "configuration errors" and no detail. Mint
+      # the standard debug keystore (the alias/passwords below are Android's
+      # well-known fixed debug values, not secrets) and point Godot at it.
+      - name: Create the Android debug keystore
+        run: |
+          KS="$HOME/.android/debug.keystore"
+          mkdir -p "$(dirname "$KS")"
+          if [ ! -f "$KS" ]; then
+            keytool -genkeypair -v \
+              -keystore "$KS" \
+              -storepass android -keypass android \
+              -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          echo "KEYSTORE=$KS" >> "$GITHUB_ENV"
+
       - name: Configure Godot's Android SDK paths
         run: |
           CFG="$HOME/.config/godot/editor_settings-4.tres"
@@ -100,6 +119,9 @@ jobs:
           [resource]
           export/android/android_sdk_path = "$ANDROID_SDK_ROOT"
           export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/debug_keystore = "$KEYSTORE"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
           EOF
 
       - name: Resolve version
