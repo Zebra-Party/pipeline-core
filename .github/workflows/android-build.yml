@@ -150,11 +150,29 @@ jobs:
         if: inputs.pre_export_script != ''
         run: bash ${{ inputs.pre_export_script }}
 
-      - name: Disable gradle_build for CI smoke test
+      # Gradle builds need the Android build template installed into the project
+      # ("Install Android Build Template" in the editor); without it the export
+      # dies with "Android build template not installed in the project". We don't
+      # need gradle — a plain APK export uses the prebuilt export template — so
+      # turn it off and switch AAB (format=1) to APK (format=0).
+      #
+      # perl, not `sed -i`: this runs on macOS, whose BSD sed reads the argument
+      # after -i as a backup SUFFIX, so `sed -i 's|…|…|' file` fails outright.
+      # It did, silently, because the commands ended in `|| true` — gradle stayed
+      # on and the export failed with the misleading message above. perl -pi -e
+      # behaves identically on macOS and Linux. No `|| true`: if this can't do its
+      # job, fail here rather than 40 lines later.
+      - name: Disable gradle_build (plain APK export)
         run: |
-          sed -i 's|^gradle_build/use_gradle_build=true|gradle_build/use_gradle_build=false|' export_presets.cfg || true
-          # AAB export (format=1) requires gradle build; switch to APK (format=0) when disabling it.
-          sed -i 's|^gradle_build/export_format=1|gradle_build/export_format=0|' export_presets.cfg || true
+          set -euo pipefail
+          perl -pi -e 's|^gradle_build/use_gradle_build=true|gradle_build/use_gradle_build=false|' export_presets.cfg
+          perl -pi -e 's|^gradle_build/export_format=1|gradle_build/export_format=0|' export_presets.cfg
+          echo "--- gradle settings now:"
+          grep -E '^gradle_build/(use_gradle_build|export_format)' export_presets.cfg
+          if grep -q '^gradle_build/use_gradle_build=true' export_presets.cfg; then
+            echo "::error::Failed to disable gradle_build — the export would fail asking for the build template."
+            exit 1
+          fi
 
       - name: Godot export (APK)
         # DELIBERATELY --export-debug, not --export-release. A debug export is
