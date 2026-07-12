@@ -19,7 +19,9 @@ Builds a signed IPA from a Flutter project and uploads it to TestFlight. Mirrors
 | `flutter_version` | string | `3.41.x` | Flutter SDK version (`subosito/flutter-action` format). |
 | `runner` | string | `["self-hosted","macOS","ephemeral"]` | JSON array of runner labels. Must be macOS. |
 | `run_build_runner` | boolean | `true` | Run `dart run build_runner build --delete-conflicting-outputs` after `flutter pub get`. Set to `false` for projects without code generators (Drift, Freezed, json_serializable, etc.). |
-| `upload_to_testflight` | boolean | `true` | Upload to TestFlight when on `main`. Build still runs on PRs. |
+| `upload_to_testflight` | boolean | `true` | Upload to TestFlight when on `main` or a `v*` tag push. Build still runs on PRs. |
+| `version` | string | _(empty)_ | Version to build, from [`release-gate.yml`](versioning.md#release-gateyml). Empty → the workflow computes it itself (back-compat). Passing it from the gate means every platform job in a release shares one version and one build number. |
+| `build` | string | _(empty)_ | Build number, from the release gate. Empty → computed locally. |
 
 The bundle ID Flutter generates from `--org X.Y --project-name a_b_c` is `X.Y.aBC` (camelCased). If your provisioning profile is for a different bundle ID, set `bundle_id` to override.
 
@@ -56,9 +58,46 @@ If any are missing the upload step is skipped with a warning; the IPA is still b
 | Materialise platform folders | `flutter create` | Regenerates `ios/` so it can never drift behind the SDK. |
 | `flutter pub get` | — | — |
 | Generate code | `build_runner` | Drift / Freezed / Riverpod codegen. Skipped if `run_build_runner: false`. |
-| Compute version | `compute_version.sh` | `X.Y.Z` from latest `v*` tag + commit count; build = `github.run_number`. |
+| Resolve version | `compute_version.sh` | Uses the `version` / `build` inputs when the release gate passed them; otherwise `X.Y.Z` from the latest `v*` tag + commit count, and a unix-timestamp build number. See [versioning.md](versioning.md). |
 | Configure signing | `configure_xcode_signing.sh` | Imports the cert into a fresh keychain, installs the profile, writes `ExportOptions.plist`, exports `KEYCHAIN_PATH` / `TEAM_ID` / `PROVISIONING_PROFILE_UUID_IOS` / `EXPORT_OPTIONS_PATH_IOS`. |
 | Build IPA | `build_flutter_ios.sh` | `flutter build ios --no-codesign` then `xcodebuild archive` + `xcodebuild -exportArchive` against `ios/Runner.xcworkspace` with manual signing. Outputs `IPA_PATH`. |
-| Upload to TestFlight | `upload_ios.sh` | Only on pushes to `main`. Uses `xcrun altool` with the App Store Connect API key. |
-| Tag release | _(inline)_ | Creates a GitHub Release `v{version}` in the calling repo (`gh release create --generate-notes --latest`). Only on `main`, never on PRs, and skipped if the release already exists. See [versioning.md](versioning.md). |
+| Upload to TestFlight | `upload_ios.sh` | Only on `main` or a `v*` tag push. Uses `xcrun altool` with the App Store Connect API key. |
+| Tag release | _(inline)_ | Creates a GitHub Release `v{version}` in the calling repo (`gh release create --notes … --generate-notes --latest`). The notes lead with a line saying the iOS builds for this version are on TestFlight — an App-Store-signed IPA can't be attached, since it isn't installable from a download. Only on `main` or a `v*` tag, never on PRs, and skipped if the release already exists. See [versioning.md](versioning.md). |
 | Clean up | `keychain_destroy` + `rm` | Destroys the per-job keychain and removes the installed `.mobileprovision`. |
+
+## Example
+
+A nightly release gated by [`release-gate.yml`](versioning.md#release-gateyml):
+
+```yaml
+# .github/workflows/release.yml
+name: Release
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "patch | minor | major"
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+jobs:
+  gate:
+    uses: Zebra-Party/pipeline-core/.github/workflows/release-gate.yml@v1
+    with:
+      bump: ${{ inputs.bump || 'patch' }}
+
+  ios:
+    needs: gate
+    if: needs.gate.outputs.release == 'true'
+    uses: Zebra-Party/pipeline-core/.github/workflows/flutter-ios-release.yml@v1
+    with:
+      app_name: "MyApp"
+      flutter_project_name: "my_app"
+      flutter_org: "com.example"
+      version: ${{ needs.gate.outputs.version }}
+      build: ${{ needs.gate.outputs.build }}
+    secrets: inherit
+```

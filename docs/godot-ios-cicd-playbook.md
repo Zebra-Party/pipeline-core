@@ -236,9 +236,9 @@ This is a smoke signal, not a problem in itself: `--export-pack` only validates 
 
 These aren't problems but choices that paid off across iterations:
 
-- **Two workflows: `ci.yml` and `release.yml`.** PRs run lint + tests only. Push-to-main runs the full release pipeline. Don't let `release.yml` trigger on every branch — you'll burn runner time and rate-limit the App Store Connect API.
+- **Two workflows: `ci.yml` and `release.yml`.** PRs run lint + tests only. `release.yml` runs **nightly on a schedule** (plus `workflow_dispatch`), fronted by a cheap gate job that skips the whole thing when nothing has been merged. Don't let `release.yml` trigger on every branch — or on every push to main — you'll burn runner time and rate-limit the App Store Connect API.
 - **Self-hosted runners.** GitHub-hosted macOS minutes are expensive and slow. A small pool of self-hosted macOS runners is enough — give each runner its own macOS user account so signing keychains never collide between concurrent jobs.
-- **Auto-versioning from git.** `major.minor` from the latest `vX.Y.Z` tag, patch from commits-since-tag, build from `github.run_number`. No manual version bumps in CI commits → no commit loops.
+- **Auto-versioning from git.** `major.minor` from the latest `vX.Y.Z` tag, patch from commits-since-tag (or an explicit `minor`/`major` bump), build number from a **unix timestamp**. Not `github.run_number` — it doesn't increment on a re-run, so re-runs resubmit a used build number and App Store Connect rejects them. No manual version bumps in CI commits → no commit loops.
 - **Direct IPA from Godot 4.6.** Don't wedge `xcodebuild -exportArchive` between Godot and the IPA — Godot 4.6's iOS exporter does it correctly when `application/export_project_only=false`. Fewer moving parts.
 - **Inject signing only at CI time.** The committed `export_presets.cfg` has empty `app_store_team_id` and `provisioning_profile_specifier_release`. `configure_ios_signing.sh` fills them in before export. Keeps secrets out of git and lets each project's CI inject its own values.
 

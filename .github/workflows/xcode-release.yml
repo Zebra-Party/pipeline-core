@@ -46,6 +46,17 @@ on:
           aren't expressible in project.yml). Default true.
         type: boolean
         default: true
+      version:
+        description: >-
+          Version to build, from release-gate.yml. When empty the workflow
+          computes it itself (back-compat). Passing it from the gate means every
+          platform job in a release shares one version and one build number.
+        type: string
+        default: ""
+      build:
+        description: "Build number, from release-gate.yml. Empty = compute locally."
+        type: string
+        default: ""
     secrets:
       APPLE_CERTIFICATE_P12_BASE64:
         required: true
@@ -117,10 +128,22 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Compute version
+      - name: Resolve version
         if: steps.signing.outputs.skip != 'true'
         id: version
-        run: bash .pipeline-core/scripts/compute_version.sh
+        env:
+          VERSION_IN: ${{ inputs.version }}
+          BUILD_IN: ${{ inputs.build }}
+        run: |
+          if [ -n "$VERSION_IN" ]; then
+            echo "Using version from release gate: $VERSION_IN (build $BUILD_IN)"
+            {
+              echo "version=$VERSION_IN"
+              echo "build=$BUILD_IN"
+            } >> "$GITHUB_OUTPUT"
+          else
+            bash .pipeline-core/scripts/compute_version.sh
+          fi
 
       - name: Configure iOS signing
         if: steps.signing.outputs.skip != 'true'
@@ -146,7 +169,7 @@ jobs:
         if: >-
           steps.signing.outputs.skip != 'true' &&
           inputs.upload_to_testflight &&
-          github.ref == 'refs/heads/main' &&
+          (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
           github.event_name != 'pull_request'
         env:
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
@@ -162,18 +185,25 @@ jobs:
       - name: Tag release
         if: >-
           steps.signing.outputs.skip != 'true' &&
-          github.ref == 'refs/heads/main' &&
+          (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
           github.event_name != 'pull_request'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
+          # An App-Store-signed IPA/.pkg can't be attached to a release (it isn't
+          # installable from a download), so the notes say where the build went
+          # instead. --notes is prepended to the --generate-notes changelog.
+          # Wording is platform-agnostic on purpose: whichever of the three
+          # parallel jobs wins the race writes these notes.
+          NOTES="iOS/macOS/tvOS builds for this version are on TestFlight."
           if gh release view "v$VERSION" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             echo "Release v$VERSION already exists — skipping."
           else
             gh release create "v$VERSION" \
               --repo "${{ github.repository }}" \
               --title "v$VERSION" \
+              --notes "$NOTES" \
               --generate-notes \
               --latest \
               || echo "Release creation skipped (may have been created by a parallel job)."
@@ -228,10 +258,22 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Compute version
+      - name: Resolve version
         if: steps.signing.outputs.skip != 'true'
         id: version
-        run: bash .pipeline-core/scripts/compute_version.sh
+        env:
+          VERSION_IN: ${{ inputs.version }}
+          BUILD_IN: ${{ inputs.build }}
+        run: |
+          if [ -n "$VERSION_IN" ]; then
+            echo "Using version from release gate: $VERSION_IN (build $BUILD_IN)"
+            {
+              echo "version=$VERSION_IN"
+              echo "build=$BUILD_IN"
+            } >> "$GITHUB_OUTPUT"
+          else
+            bash .pipeline-core/scripts/compute_version.sh
+          fi
 
       - name: Configure macOS signing
         if: steps.signing.outputs.skip != 'true'
@@ -255,7 +297,7 @@ jobs:
         if: >-
           steps.signing.outputs.skip != 'true' &&
           inputs.upload_to_testflight &&
-          github.ref == 'refs/heads/main' &&
+          (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
           github.event_name != 'pull_request'
         env:
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
@@ -271,18 +313,25 @@ jobs:
       - name: Tag release
         if: >-
           steps.signing.outputs.skip != 'true' &&
-          github.ref == 'refs/heads/main' &&
+          (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
           github.event_name != 'pull_request'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
+          # An App-Store-signed IPA/.pkg can't be attached to a release (it isn't
+          # installable from a download), so the notes say where the build went
+          # instead. --notes is prepended to the --generate-notes changelog.
+          # Wording is platform-agnostic on purpose: whichever of the three
+          # parallel jobs wins the race writes these notes.
+          NOTES="iOS/macOS/tvOS builds for this version are on TestFlight."
           if gh release view "v$VERSION" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             echo "Release v$VERSION already exists — skipping."
           else
             gh release create "v$VERSION" \
               --repo "${{ github.repository }}" \
               --title "v$VERSION" \
+              --notes "$NOTES" \
               --generate-notes \
               --latest \
               || echo "Release creation skipped (may have been created by a parallel job)."
@@ -337,10 +386,22 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Compute version
+      - name: Resolve version
         if: steps.signing.outputs.skip != 'true'
         id: version
-        run: bash .pipeline-core/scripts/compute_version.sh
+        env:
+          VERSION_IN: ${{ inputs.version }}
+          BUILD_IN: ${{ inputs.build }}
+        run: |
+          if [ -n "$VERSION_IN" ]; then
+            echo "Using version from release gate: $VERSION_IN (build $BUILD_IN)"
+            {
+              echo "version=$VERSION_IN"
+              echo "build=$BUILD_IN"
+            } >> "$GITHUB_OUTPUT"
+          else
+            bash .pipeline-core/scripts/compute_version.sh
+          fi
 
       - name: Configure tvOS signing
         if: steps.signing.outputs.skip != 'true'
@@ -363,7 +424,7 @@ jobs:
         if: >-
           steps.signing.outputs.skip != 'true' &&
           inputs.upload_to_testflight &&
-          github.ref == 'refs/heads/main' &&
+          (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
           github.event_name != 'pull_request'
         env:
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
@@ -379,18 +440,25 @@ jobs:
       - name: Tag release
         if: >-
           steps.signing.outputs.skip != 'true' &&
-          github.ref == 'refs/heads/main' &&
+          (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
           github.event_name != 'pull_request'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
+          # An App-Store-signed IPA/.pkg can't be attached to a release (it isn't
+          # installable from a download), so the notes say where the build went
+          # instead. --notes is prepended to the --generate-notes changelog.
+          # Wording is platform-agnostic on purpose: whichever of the three
+          # parallel jobs wins the race writes these notes.
+          NOTES="iOS/macOS/tvOS builds for this version are on TestFlight."
           if gh release view "v$VERSION" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             echo "Release v$VERSION already exists — skipping."
           else
             gh release create "v$VERSION" \
               --repo "${{ github.repository }}" \
               --title "v$VERSION" \
+              --notes "$NOTES" \
               --generate-notes \
               --latest \
               || echo "Release creation skipped (may have been created by a parallel job)."

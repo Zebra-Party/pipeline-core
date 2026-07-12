@@ -4,6 +4,8 @@
 
 Runs GDScript lint, asset reimport, scene boot checks, headless tests, and (on PRs) screenshot capture. Designed to run on every pull request as a quality gate before merge.
 
+> **This workflow does not release anything.** Merging to `main` no longer triggers a build. Releases are **nightly and gated**: the repo's `release.yml` runs on a `schedule` (plus `workflow_dispatch` for an on-demand `patch`/`minor`/`major`), and its first job is [`release-gate.yml`](versioning.md#release-gateyml), which decides whether there's anything new to ship and computes one version + build number for all platform jobs. A night with no new commits is a no-op. See [versioning.md](versioning.md).
+
 ## Inputs
 
 | Input | Type | Default | Description |

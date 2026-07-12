@@ -1,16 +1,20 @@
 name: Android Build
 
-# Reusable workflow: Android APK/AAB build. Produces an unsigned debug APK
-# as an artifact. Release signing + Play Store upload are deferred.
+# Reusable workflow: Android APK build. Produces a debug-signed (sideloadable)
+# APK as a workflow artifact, and optionally attaches it to the GitHub Release
+# for the version being shipped. Play Store upload is deferred.
 #
 # Usage:
 #   jobs:
 #     android:
-#       needs: test
+#       needs: gate
 #       uses: Zebra-Party/pipeline-core/.github/workflows/android-build.yml@v1
 #       with:
 #         godot_version: "4.6.2-stable"
 #         app_name: "GameTwo"
+#         version: ${{ needs.gate.outputs.version }}
+#         build: ${{ needs.gate.outputs.build }}
+#         attach_to_release: true
 #       secrets: inherit
 
 on:
@@ -35,6 +39,24 @@ on:
         description: "Optional project script to run before Godot export"
         type: string
         default: ""
+      version:
+        description: >-
+          Version to build, from release-gate.yml. When empty the workflow
+          computes it itself (back-compat). Passing it from the gate means every
+          platform job in a release shares one version and one build number.
+        type: string
+        default: ""
+      build:
+        description: "Build number, from release-gate.yml. Empty = compute locally."
+        type: string
+        default: ""
+      attach_to_release:
+        description: >-
+          Attach the APK to the GitHub Release v{version}, creating the release
+          if the Apple jobs haven't yet. Requires `version` to be passed.
+          Default false — existing callers keep artifact-only behaviour.
+        type: boolean
+        default: false
 
 jobs:
   android:
@@ -80,9 +102,21 @@ jobs:
           export/android/java_sdk_path = "$JAVA_HOME"
           EOF
 
-      - name: Compute version
+      - name: Resolve version
         id: version
-        run: bash .pipeline-core/scripts/compute_version.sh
+        env:
+          VERSION_IN: ${{ inputs.version }}
+          BUILD_IN: ${{ inputs.build }}
+        run: |
+          if [ -n "$VERSION_IN" ]; then
+            echo "Using version from release gate: $VERSION_IN (build $BUILD_IN)"
+            {
+              echo "version=$VERSION_IN"
+              echo "build=$BUILD_IN"
+            } >> "$GITHUB_OUTPUT"
+          else
+            bash .pipeline-core/scripts/compute_version.sh
+          fi
 
       - name: Apply version to project + presets
         run: bash .pipeline-core/scripts/set_version.sh "${{ steps.version.outputs.version }}" "${{ steps.version.outputs.build }}"
@@ -101,6 +135,12 @@ jobs:
           sed -i 's|^gradle_build/export_format=1|gradle_build/export_format=0|' export_presets.cfg || true
 
       - name: Godot export (APK)
+        # DELIBERATELY --export-debug, not --export-release. A debug export is
+        # signed with Godot's built-in debug keystore, which is what makes the
+        # APK installable by anyone who downloads it (sideloading). A release
+        # export needs a real upload keystore we don't have wired up yet, and
+        # an unsigned APK won't install at all. Do NOT "fix" this to
+        # --export-release without adding keystore secrets first.
         run: |
           mkdir -p build/android
           "$GODOT" --headless --path . \
@@ -114,6 +154,38 @@ jobs:
           path: build/android/*.apk
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Attach APK to GitHub Release
+        # The workflow artifact above expires after 14 days and needs a GitHub
+        # login to download. Attaching to the release gives the APK a permanent,
+        # directly-downloadable home. The Apple jobs run in parallel and also
+        # create v{version}, so this must be race-safe: view-or-create, then
+        # upload with --clobber so a re-run overwrites rather than errors.
+        if: >-
+          inputs.attach_to_release &&
+          inputs.version != '' &&
+          github.event_name != 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          APK_PATH: build/android/${{ inputs.app_name }}.apk
+        run: |
+          TAG="v${{ inputs.version }}"
+          if [ ! -f "$APK_PATH" ]; then
+            echo "::warning::No APK at $APK_PATH — nothing to attach."
+            exit 0
+          fi
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — attaching APK to it."
+          else
+            gh release create "$TAG" \
+              --repo "${{ github.repository }}" \
+              --title "$TAG" \
+              --notes "Android APK attached below (debug-signed, sideloadable)." \
+              --generate-notes \
+              --latest \
+              || echo "Release creation skipped (may have been created by a parallel job)."
+          fi
+          gh release upload "$TAG" "$APK_PATH" --repo "${{ github.repository }}" --clobber
 
       - name: Restore export_presets.cfg
         if: always()

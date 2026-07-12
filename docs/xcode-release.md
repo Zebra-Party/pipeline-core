@@ -12,8 +12,10 @@ The three platforms run as **parallel jobs** (`ios`, `macos`, `tvos`). Each one 
 |---|---|---|---|
 | `app_name` | string | _(required)_ | The Xcode **scheme** name and the basename of the produced `.ipa` / `.pkg`. Also used to locate the project: `build_xcode.sh` prefers `<app_name>.xcworkspace`, falling back to `<app_name>.xcodeproj`. |
 | `runner` | string | `["self-hosted","macOS","ephemeral"]` | JSON array of runner labels. Must be macOS — Xcode is required. |
-| `upload_to_testflight` | boolean | `true` | Whether to upload to TestFlight. Upload only happens on the `main` branch and never on pull requests; this flag disables it entirely. |
+| `upload_to_testflight` | boolean | `true` | Whether to upload to TestFlight. Upload only happens on `main` or a `v*` tag push, never on pull requests; this flag disables it entirely. |
 | `regenerate_xcodeproj` | boolean | `true` | Run `xcodegen generate` before building, when a `project.yml` exists at the repo root. Set to `false` for repos whose committed `.xcodeproj` has hand-tuned settings that XcodeGen would drop (notably iOS code-signing details that aren't expressible in `project.yml`). |
+| `version` | string | _(empty)_ | Version to build, from [`release-gate.yml`](versioning.md#release-gateyml). Empty → each job computes it itself (back-compat). Passing it from the gate means the three platform jobs all ship the **same** `X.Y.Z` and the same build number. |
+| `build` | string | _(empty)_ | Build number, from the release gate. Empty → computed locally, per job. |
 
 ## Secrets
 
@@ -69,35 +71,50 @@ Each of the three jobs runs the same sequence, differing only in `PLATFORM` (`io
 | Select Xcode | `select_xcode.sh` | Picks the newest `Xcode*.app` under `/Applications/`. |
 | Regenerate Xcode project | `regenerate_xcodeproj.sh` | Runs `xcodegen generate` if `project.yml` exists at the repo root; a no-op otherwise. Keeps the committed `.xcodeproj` from going stale when a contributor adds a source file. Skipped entirely when `regenerate_xcodeproj: false`. |
 | Check signing secrets | _(inline)_ | If the certificate or this platform's provisioning profile is empty, sets `skip=true` — every step below is then skipped and the job succeeds with a warning. |
-| Compute version | `compute_version.sh` | Derives `X.Y.Z` and the build number from git tags. See [versioning.md](versioning.md). |
+| Resolve version | `compute_version.sh` | Uses the `version` / `build` inputs when the release gate passed them; otherwise derives `X.Y.Z` and a timestamp build number from git tags. See [versioning.md](versioning.md). |
 | Configure signing | `configure_xcode_signing.sh` | Imports the distribution cert (and, on macOS, the Mac Installer cert) into a fresh temporary keychain, installs the provisioning profile(s), and writes an `ExportOptions.plist` for the platform. Exports `KEYCHAIN_PATH`, `TEAM_ID`, `PROVISIONING_PROFILE_UUID_<PLATFORM>`, `EXPORT_OPTIONS_PATH_<PLATFORM>`. |
 | Build | `build_xcode.sh` | `xcodebuild archive` then `xcodebuild -exportArchive` against `<app_name>.xcworkspace` (preferred) or `<app_name>.xcodeproj`, with manual signing and `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` set from the computed version. Retries the archive up to 3× on transient codesign failures (`errSecInternalComponent`, timestamp-service hiccups) — a real compile error still fails fast on the first attempt. Outputs `IPA_PATH` (iOS/tvOS) or `PKG_PATH` (macOS). |
-| Upload to TestFlight | `upload_ios.sh` / `upload_macos.sh` / `upload_tvos.sh` | `xcrun altool --upload-app` with the App Store Connect API key. Only on `main`, never on PRs, and only if `upload_to_testflight` and the upload secrets are present. |
-| Tag release | _(inline)_ | Creates a GitHub Release `v{version}` in the **calling repo** (`gh release create --generate-notes --latest`). Only on `main`, never on PRs. Idempotent — skips if the release exists, so the three parallel platform jobs don't collide on the same commit. |
+| Upload to TestFlight | `upload_ios.sh` / `upload_macos.sh` / `upload_tvos.sh` | `xcrun altool --upload-app` with the App Store Connect API key. Only on `main` or a `v*` tag push, never on PRs, and only if `upload_to_testflight` and the upload secrets are present. |
+| Tag release | _(inline)_ | Creates a GitHub Release `v{version}` in the **calling repo** (`gh release create --notes … --generate-notes --latest`). The notes lead with a line saying the iOS/macOS/tvOS builds for this version are on TestFlight — an App-Store-signed IPA/`.pkg` can't be attached to a release because it isn't installable from a download. The wording is platform-agnostic on purpose: whichever of the three parallel jobs wins the race writes the notes. Only on `main` or a `v*` tag, never on PRs. Idempotent — skips if the release exists, so the three jobs don't collide on the same commit. |
 | Clean up signing artefacts | _(inline)_ | Always runs. Destroys the temporary keychain and removes the installed provisioning profile so nothing persists on the runner. |
 
 ## Example
 
-An iOS-only app with a widget extension:
+An iOS-only app with a widget extension, released nightly behind [`release-gate.yml`](versioning.md#release-gateyml):
 
 ```yaml
 # .github/workflows/release.yml
 name: Release
 on:
-  push:
-    branches: [main]
+  schedule:
+    - cron: "0 3 * * *"
   workflow_dispatch:
+    inputs:
+      bump:
+        description: "patch | minor | major"
+        type: choice
+        options: [patch, minor, major]
+        default: patch
 
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
+  gate:
+    uses: Zebra-Party/pipeline-core/.github/workflows/release-gate.yml@v1
+    with:
+      bump: ${{ inputs.bump || 'patch' }}
+
   release:
+    needs: gate
+    if: needs.gate.outputs.release == 'true'
     uses: Zebra-Party/pipeline-core/.github/workflows/xcode-release.yml@v1
     with:
       app_name: "MyApp"
       upload_to_testflight: true
+      version: ${{ needs.gate.outputs.version }}
+      build: ${{ needs.gate.outputs.build }}
     secrets:
       APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
