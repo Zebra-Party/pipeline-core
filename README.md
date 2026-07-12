@@ -25,7 +25,7 @@ Updating a script or workflow here takes effect on the next run in every consume
 | `ios-release.yml` | Godot — code-sign and export IPA, upload to TestFlight | [docs/ios-release.md](docs/ios-release.md) |
 | `macos-release.yml` | Godot — code-sign, export .app + .pkg, upload to TestFlight | [docs/macos-release.md](docs/macos-release.md) |
 | `android-build.yml` | Godot — export unsigned debug APK, upload as artifact | [docs/android-build.md](docs/android-build.md) |
-| `xcode-release.yml` | Native Xcode (iOS/macOS/tvOS) — code-sign + TestFlight upload | — |
+| `xcode-release.yml` | Native Xcode (iOS/macOS/tvOS) — code-sign + TestFlight upload | [docs/xcode-release.md](docs/xcode-release.md) |
 | `flutter-ios-release.yml` | Flutter iOS — code-sign IPA, upload to TestFlight | [docs/flutter-ios-release.md](docs/flutter-ios-release.md) |
 
 ## Runners
@@ -51,7 +51,7 @@ concurrency:
 
 jobs:
   gdscript:
-    uses: Zebra-Party/pipeline-core/.github/workflows/gdscript-ci.yml@main
+    uses: Zebra-Party/pipeline-core/.github/workflows/gdscript-ci.yml@v1
     permissions:
       contents: write      # needed to push screenshots to ci-screenshots branch
       pull-requests: write # needed to post the screenshot PR comment
@@ -78,7 +78,7 @@ concurrency:
 
 jobs:
   ios:
-    uses: Zebra-Party/pipeline-core/.github/workflows/ios-release.yml@main
+    uses: Zebra-Party/pipeline-core/.github/workflows/ios-release.yml@v1
     with:
       godot_version: "4.6.2-stable"
       app_name: "MyGame"
@@ -86,14 +86,14 @@ jobs:
     secrets: inherit
 
   android:
-    uses: Zebra-Party/pipeline-core/.github/workflows/android-build.yml@main
+    uses: Zebra-Party/pipeline-core/.github/workflows/android-build.yml@v1
     with:
       godot_version: "4.6.2-stable"
       app_name: "MyGame"
     secrets: inherit
 ```
 
-If the project has a pre-build step (e.g. a .NET scene compiler), pass it via `pre_test_script` / `pre_export_script`:
+If the project has a pre-build step (e.g. a scene compiler that generates `.tscn` files from source), pass it via `pre_test_script` / `pre_export_script`:
 
 ```yaml
     with:
@@ -103,7 +103,15 @@ If the project has a pre-build step (e.g. a .NET scene compiler), pass it via `p
 
 ## Versioning
 
-See [docs/versioning.md](docs/versioning.md).
+Consumers pin to the floating major tag **`@v1`** (as in the snippets above), so patch
+and minor fixes here reach every repo automatically while breaking changes wait for a
+deliberate bump to `@v2`.
+
+- [docs/versioning.md](docs/versioning.md) — how a build's `X.Y.Z` is computed, the
+  automatic `v{version}` release each successful `main` build cuts in the calling repo,
+  and how to cut a pipeline-core release.
+- [docs/release-process.md](docs/release-process.md) — how code gets from a PR to
+  TestFlight.
 
 ## Repository layout
 

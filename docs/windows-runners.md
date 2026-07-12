@@ -45,8 +45,9 @@ job uses (self-hosted runners are long-lived machines, not per-job images). For 
   `C:/.../Git/foo/...`; in bash set `MSYS_NO_PATHCONV=1` and `cygpath -w` real paths. `pwsh`
   passes arguments literally.
 - **Persistent hosts keep state between jobs.** Caches stay warm, but a job must not assume a
-  clean workspace — use `clean_checkout: true` (where a workflow exposes it) or clean up
-  explicitly when a pristine tree is required.
+  clean workspace. No workflow here exposes a "wipe the workspace" input — if a step needs a
+  pristine tree, it has to clean up after itself (e.g. `git clean -xdf`, or removing the build
+  output directory before writing to it).
 
 ## Host provisioning
 

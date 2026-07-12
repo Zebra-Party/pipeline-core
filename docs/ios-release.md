@@ -9,11 +9,10 @@ Builds a signed IPA via Godot's iOS exporter and uploads it to TestFlight. Signi
 | Input | Type | Default | Description |
 |---|---|---|---|
 | `godot_version` | string | `4.6.2-stable` | Godot release to use. |
-| `runner` | string | `["self-hosted","macOS","X64"]` | JSON array of runner labels. Must be a macOS runner — Xcode is required. |
+| `runner` | string | `["self-hosted","macOS","ephemeral"]` | JSON array of runner labels. Must be a macOS runner — Xcode is required. |
 | `app_name` | string | `export` | Base filename for the produced `.ipa` (no extension). |
 | `upload_to_testflight` | boolean | `true` | Whether to upload the IPA to TestFlight. Upload only happens when on the `main` branch and the event is not a pull request — this flag lets you disable it entirely (e.g. for a staging project). |
 | `pre_export_script` | string | _(empty)_ | Optional shell script to run after signing is configured but before Godot exports. Use this for code generation that must run before the Godot export (e.g. `tools/compile_scenes.sh`). |
-| `clean_checkout` | boolean | `false` | Wipe workspace before checkout. |
 
 ## Secrets
 
@@ -51,6 +50,7 @@ If any of these three are absent, the upload step is skipped with a warning but 
 | Pre-export script | _(your script)_ | Only runs if `pre_export_script` is set and signing was not skipped. |
 | Build IPA | `build_ios.sh` | Re-unlocks the keychain and re-asserts it as the system default (guards against keychain auto-lock between steps), then calls `godot --export-release "iOS"`. Verifies the produced IPA contains a `.pck` and has a valid codesign signature. |
 | Upload to TestFlight | `upload_ios.sh` | Uses `xcrun altool --upload-app --type ios` with the App Store Connect API key. Only runs on the `main` branch and only if upload secrets are present. |
+| Tag release | _(inline)_ | Creates a GitHub Release `v{version}` in the **calling repo** via `gh release create --generate-notes --latest`, using the version from `compute_version.sh`. Only runs on `main` (never on PRs) and only if signing wasn't skipped. Idempotent: skips if the release already exists, so parallel platform jobs on the same commit don't collide. This tag is what anchors the next build's patch counter — see [versioning.md](versioning.md). |
 | Clean up keychain | _(inline)_ | Always runs. Restores `login.keychain-db` as the system default, then deletes the temporary build keychain so it doesn't persist on the runner. |
 | Restore presets | _(inline)_ | Always runs. Discards the version + signing changes to `export_presets.cfg` with `git checkout` so the working tree is clean for the next run. |
 
@@ -68,7 +68,7 @@ on:
 
 jobs:
   ios:
-    uses: Zebra-Party/pipeline-core/.github/workflows/ios-release.yml@main
+    uses: Zebra-Party/pipeline-core/.github/workflows/ios-release.yml@v1
     with:
       godot_version: "4.6.2-stable"
       app_name: "MyGame"
@@ -82,7 +82,7 @@ With a pre-export code generation step, and skipping the Dependabot actor who wo
 jobs:
   ios:
     if: github.actor != 'dependabot[bot]'
-    uses: Zebra-Party/pipeline-core/.github/workflows/ios-release.yml@main
+    uses: Zebra-Party/pipeline-core/.github/workflows/ios-release.yml@v1
     with:
       godot_version: "4.6.2-stable"
       app_name: "MyGame"
