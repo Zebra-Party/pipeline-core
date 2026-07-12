@@ -1,0 +1,79 @@
+name: Release Gate
+
+# Reusable workflow: decides whether a release should happen, and computes the
+# version + build number once so every platform job shares them.
+#
+# Call this FIRST from a release workflow, then gate the (expensive, self-hosted)
+# platform jobs on its `release` output. It runs on a free GitHub-hosted Linux
+# runner, so a quiet night costs seconds and never wakes the macOS pool.
+#
+# Usage:
+#   jobs:
+#     gate:
+#       uses: Zebra-Party/pipeline-core/.github/workflows/release-gate.yml@v1
+#       with:
+#         bump: ${{ inputs.bump || 'patch' }}
+#
+#     release:
+#       needs: gate
+#       if: needs.gate.outputs.release == 'true'
+#       uses: Zebra-Party/pipeline-core/.github/workflows/xcode-release.yml@v1
+#       with:
+#         app_name: "MyApp"
+#         version: ${{ needs.gate.outputs.version }}
+#         build: ${{ needs.gate.outputs.build }}
+#       secrets: inherit
+
+on:
+  workflow_call:
+    inputs:
+      bump:
+        description: "patch (default, adds commits since the last tag) | minor | major"
+        type: string
+        default: "patch"
+    outputs:
+      release:
+        description: "true when there is something to ship; false on a quiet night"
+        value: ${{ jobs.gate.outputs.release }}
+      version:
+        description: "Computed semver, e.g. 0.2.7"
+        value: ${{ jobs.gate.outputs.version }}
+      build:
+        description: "Build number (unix timestamp), shared by every platform job"
+        value: ${{ jobs.gate.outputs.build }}
+
+jobs:
+  gate:
+    name: Should we release?
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      release: ${{ steps.version.outputs.release }}
+      version: ${{ steps.version.outputs.version }}
+      build: ${{ steps.version.outputs.build }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/checkout@v6
+        with:
+          repository: Zebra-Party/pipeline-core
+          ref: v1
+          path: .pipeline-core
+
+      - name: Compute version
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: bash .pipeline-core/scripts/compute_version.sh
+
+      - name: Summary
+        run: |
+          if [ "${{ steps.version.outputs.release }}" = "true" ]; then
+            echo "### Releasing v${{ steps.version.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+            echo "Build \`${{ steps.version.outputs.build }}\` · bump \`${{ inputs.bump }}\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### No release" >> "$GITHUB_STEP_SUMMARY"
+            echo "No new commits since \`v${{ steps.version.outputs.version }}\` — nothing to ship." >> "$GITHUB_STEP_SUMMARY"
+          fi

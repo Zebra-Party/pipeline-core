@@ -11,8 +11,10 @@ Builds a signed IPA via Godot's iOS exporter and uploads it to TestFlight. Signi
 | `godot_version` | string | `4.6.2-stable` | Godot release to use. |
 | `runner` | string | `["self-hosted","macOS","ephemeral"]` | JSON array of runner labels. Must be a macOS runner — Xcode is required. |
 | `app_name` | string | `export` | Base filename for the produced `.ipa` (no extension). |
-| `upload_to_testflight` | boolean | `true` | Whether to upload the IPA to TestFlight. Upload only happens when on the `main` branch and the event is not a pull request — this flag lets you disable it entirely (e.g. for a staging project). |
+| `upload_to_testflight` | boolean | `true` | Whether to upload the IPA to TestFlight. Upload only happens on `main` or a `v*` tag push, and never on a pull request — this flag lets you disable it entirely (e.g. for a staging project). |
 | `pre_export_script` | string | _(empty)_ | Optional shell script to run after signing is configured but before Godot exports. Use this for code generation that must run before the Godot export (e.g. `tools/compile_scenes.sh`). |
+| `version` | string | _(empty)_ | Version to build, from [`release-gate.yml`](versioning.md#release-gateyml). Empty → the workflow computes it itself (back-compat). Passing it from the gate means every platform job in a release shares one version and one build number. |
+| `build` | string | _(empty)_ | Build number, from the release gate. Empty → computed locally. |
 
 ## Secrets
 
@@ -43,38 +45,59 @@ If any of these three are absent, the upload step is skipped with a warning but 
 | Step | Script | What it does |
 |---|---|---|
 | Install Godot | `install_godot.sh` | Downloads Godot + iOS export templates into a per-runner cache. |
-| Compute version | `compute_version.sh` | Derives `X.Y.Z` version and build number from git tags. See [versioning.md](versioning.md). |
+| Resolve version | `compute_version.sh` | Uses the `version` / `build` inputs when the release gate passed them; otherwise derives `X.Y.Z` and a timestamp build number from git tags. See [versioning.md](versioning.md). |
 | Apply version | `set_version.sh` | Writes the computed version into `project.godot` and `export_presets.cfg`. |
 | Reimport | `godot_import.sh` | Primes the `.godot/imported/` cache so Godot's iOS exporter has all asset sidecars available. |
 | Configure signing | `configure_ios_signing.sh` | Decodes the `.p12` and `.mobileprovision` from base64, imports the certificate into a fresh temporary keychain, installs the profile, and patches `export_presets.cfg` with the Team ID and profile UUID. Prints a warning if the profile's bundle ID doesn't match the preset. |
 | Pre-export script | _(your script)_ | Only runs if `pre_export_script` is set and signing was not skipped. |
 | Build IPA | `build_ios.sh` | Re-unlocks the keychain and re-asserts it as the system default (guards against keychain auto-lock between steps), then calls `godot --export-release "iOS"`. Verifies the produced IPA contains a `.pck` and has a valid codesign signature. |
-| Upload to TestFlight | `upload_ios.sh` | Uses `xcrun altool --upload-app --type ios` with the App Store Connect API key. Only runs on the `main` branch and only if upload secrets are present. |
-| Tag release | _(inline)_ | Creates a GitHub Release `v{version}` in the **calling repo** via `gh release create --generate-notes --latest`, using the version from `compute_version.sh`. Only runs on `main` (never on PRs) and only if signing wasn't skipped. Idempotent: skips if the release already exists, so parallel platform jobs on the same commit don't collide. This tag is what anchors the next build's patch counter — see [versioning.md](versioning.md). |
+| Upload to TestFlight | `upload_ios.sh` | Uses `xcrun altool --upload-app --type ios` with the App Store Connect API key. Only runs on `main` or a `v*` tag push, and only if upload secrets are present. |
+| Tag release | _(inline)_ | Creates a GitHub Release `v{version}` in the **calling repo** via `gh release create --notes … --generate-notes --latest`. The notes lead with a line saying the iOS builds for this version are on TestFlight (an App-Store-signed IPA can't be attached — it isn't installable from a download), followed by the generated changelog. Only runs on `main` or a `v*` tag (never on PRs) and only if signing wasn't skipped. Idempotent: skips if the release already exists, so parallel platform jobs on the same commit don't collide. This tag is what anchors the next build's patch counter — see [versioning.md](versioning.md). |
 | Clean up keychain | _(inline)_ | Always runs. Restores `login.keychain-db` as the system default, then deletes the temporary build keychain so it doesn't persist on the runner. |
 | Restore presets | _(inline)_ | Always runs. Discards the version + signing changes to `export_presets.cfg` with `git checkout` so the working tree is clean for the next run. |
 
 ## Example
 
-Standard single-target setup:
+Standard setup — a nightly release, gated by [`release-gate.yml`](versioning.md#release-gateyml) so a quiet night never wakes the macOS pool:
 
 ```yaml
 # .github/workflows/release.yml
 name: Release
 on:
-  push:
-    branches: [main]
+  schedule:
+    - cron: "0 3 * * *"
   workflow_dispatch:
+    inputs:
+      bump:
+        description: "patch | minor | major"
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
+  gate:
+    uses: Zebra-Party/pipeline-core/.github/workflows/release-gate.yml@v1
+    with:
+      bump: ${{ inputs.bump || 'patch' }}
+
   ios:
+    needs: gate
+    if: needs.gate.outputs.release == 'true'
     uses: Zebra-Party/pipeline-core/.github/workflows/ios-release.yml@v1
     with:
       godot_version: "4.6.2-stable"
       app_name: "MyGame"
       upload_to_testflight: true
+      version: ${{ needs.gate.outputs.version }}
+      build: ${{ needs.gate.outputs.build }}
     secrets: inherit
 ```
+
+Calling it without `version` / `build` still works — the workflow then computes them itself.
 
 With a pre-export code generation step, and skipping the Dependabot actor who won't have signing secrets:
 

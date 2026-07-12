@@ -12,8 +12,10 @@ Builds a signed `.app` and `.pkg` via Godot's macOS exporter and uploads to Test
 | `runner` | string | `["self-hosted","macOS","ephemeral"]` | JSON array of runner labels. Must be macOS. |
 | `app_name` | string | `export` | Base filename for the `.app` and `.pkg` (no extension). |
 | `macos_preset` | string | `macOS (Universal)` | Name of the Godot export preset to use. Must match exactly what's in `export_presets.cfg`. |
-| `upload_to_testflight` | boolean | `true` | Whether to upload the `.pkg` to TestFlight. Only runs on `main`, never on PRs. |
+| `upload_to_testflight` | boolean | `true` | Whether to upload the `.pkg` to TestFlight. Only runs on `main` or a `v*` tag push, never on PRs. |
 | `pre_export_script` | string | _(empty)_ | Optional shell script to run after signing is configured but before Godot exports. |
+| `version` | string | _(empty)_ | Version to build, from [`release-gate.yml`](versioning.md#release-gateyml). Empty → the workflow computes it itself (back-compat). Passing it from the gate means every platform job in a release shares one version and one build number. |
+| `build` | string | _(empty)_ | Build number, from the release gate. Empty → computed locally. |
 
 ## Secrets
 
@@ -48,38 +50,56 @@ If either `APPLE_CERTIFICATE_P12_BASE64` or `APPLE_MACOS_DISTRIBUTION_PROVISION`
 | Step | Script | What it does |
 |---|---|---|
 | Install Godot | `install_godot.sh` | Downloads Godot + export templates into a per-runner cache. |
-| Compute version | `compute_version.sh` | Derives version and build number from git tags. See [versioning.md](versioning.md). |
+| Resolve version | `compute_version.sh` | Uses the `version` / `build` inputs when the release gate passed them; otherwise derives them from git tags. See [versioning.md](versioning.md). |
 | Apply version | `set_version.sh` | Writes version into `project.godot` and `export_presets.cfg`. |
 | Reimport | `godot_import.sh` | Primes the asset import cache. |
 | Configure signing | `configure_macos_signing.sh` | Decodes and imports the distribution cert (and optionally the Mac Installer cert) into a temporary keychain. Extracts the provisioning profile UUID and Team ID. Patches `export_presets.cfg` with `codesign/apple_team_id` and `codesign/identity = "Apple Distribution"`. |
 | Pre-export script | _(your script)_ | Only runs if `pre_export_script` is set and signing was not skipped. |
 | Build .app + .pkg | `build_macos.sh` | Calls `godot --export-release` with the macOS preset. Unwraps the `.zip` that Godot may produce instead of a bare `.app`. Embeds the provisioning profile, re-signs with `codesign --force --options runtime --timestamp`, then calls `productbuild` to create the `.pkg`. If the Mac Installer cert is present, the `.pkg` is signed; otherwise it is unsigned (and a warning is printed). |
-| Upload to TestFlight | `upload_macos.sh` | Uses `xcrun altool --upload-app --type macos`. Only runs on `main`. |
-| Tag release | _(inline)_ | Creates a GitHub Release `v{version}` in the **calling repo** via `gh release create --generate-notes --latest`, using the version from `compute_version.sh`. Only runs on `main` (never on PRs) and only if signing wasn't skipped. Idempotent: skips if the release already exists, so an iOS and a macOS job on the same commit don't collide. See [versioning.md](versioning.md). |
+| Upload to TestFlight | `upload_macos.sh` | Uses `xcrun altool --upload-app --type macos`. Only runs on `main` or a `v*` tag push. |
+| Tag release | _(inline)_ | Creates a GitHub Release `v{version}` in the **calling repo** via `gh release create --notes … --generate-notes --latest`. The notes lead with a line saying the macOS builds for this version are on TestFlight (an App-Store-signed `.pkg` can't be attached — it isn't installable from a download), followed by the generated changelog. Only runs on `main` or a `v*` tag (never on PRs) and only if signing wasn't skipped. Idempotent: skips if the release already exists, so an iOS and a macOS job on the same commit don't collide. See [versioning.md](versioning.md). |
 | Clean up keychain | _(inline)_ | Always runs. Restores the login keychain as default and deletes the temporary keychain. |
 | Restore presets | _(inline)_ | Always runs. Reverts `export_presets.cfg` to its committed state. |
 
 ## Example
 
+A nightly release gated by [`release-gate.yml`](versioning.md#release-gateyml), so a quiet night never wakes the macOS pool:
+
 ```yaml
 # .github/workflows/release.yml
 name: Release
 on:
-  push:
-    branches: [main]
+  schedule:
+    - cron: "0 3 * * *"
   workflow_dispatch:
+    inputs:
+      bump:
+        description: "patch | minor | major"
+        type: choice
+        options: [patch, minor, major]
+        default: patch
 
 jobs:
+  gate:
+    uses: Zebra-Party/pipeline-core/.github/workflows/release-gate.yml@v1
+    with:
+      bump: ${{ inputs.bump || 'patch' }}
+
   macos:
-    if: github.actor != 'dependabot[bot]'
+    needs: gate
+    if: needs.gate.outputs.release == 'true'
     uses: Zebra-Party/pipeline-core/.github/workflows/macos-release.yml@v1
     with:
       godot_version: "4.6.2-stable"
       app_name: "MyGame"
       macos_preset: "macOS (Universal)"
       upload_to_testflight: true
+      version: ${{ needs.gate.outputs.version }}
+      build: ${{ needs.gate.outputs.build }}
     secrets: inherit
 ```
+
+Omitting `version` / `build` still works — the workflow then computes them itself.
 
 ## export_presets.cfg requirements
 
