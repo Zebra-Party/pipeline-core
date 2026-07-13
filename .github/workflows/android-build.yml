@@ -202,11 +202,20 @@ jobs:
           retention-days: 14
 
       - name: Attach APK to GitHub Release
-        # The workflow artifact above expires after 14 days and needs a GitHub
-        # login to download. Attaching to the release gives the APK a permanent,
-        # directly-downloadable home. The Apple jobs run in parallel and also
-        # create v{version}, so this must be race-safe: view-or-create, then
-        # upload with --clobber so a re-run overwrites rather than errors.
+        # The workflow artifact above expires after 14 days and needs a GitHub login
+        # to download; attaching to the release gives the APK a permanent, directly
+        # downloadable home.
+        #
+        # GitHub seals a published release (immutable), so an asset CANNOT be added
+        # after the fact — `gh release upload` returns HTTP 422. The old code assumed
+        # view-or-create-then-upload was race-safe; it is not. If an Apple job wins the
+        # race and publishes v{version} first, the APK is locked out for good (that is
+        # exactly how MumsSudoku shipped a release with no APK).
+        #
+        # So: create the release WITH the asset in a single call. Consumers additionally
+        # order their Apple jobs after this one (`needs: [android]`) so we always get
+        # there first. If we somehow don't, fail loudly rather than ship an APK-less
+        # release and call it success.
         if: >-
           inputs.attach_to_release &&
           inputs.version != '' &&
@@ -214,24 +223,32 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           APK_PATH: build/android/${{ inputs.app_name }}.apk
+          REPO: ${{ github.repository }}
         run: |
+          set -euo pipefail
           TAG="v${{ inputs.version }}"
           if [ ! -f "$APK_PATH" ]; then
-            echo "::warning::No APK at $APK_PATH — nothing to attach."
-            exit 0
+            echo "::error::No APK at $APK_PATH — the export step should have produced one."
+            exit 1
           fi
-          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            echo "Release $TAG already exists — attaching APK to it."
+
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — trying to attach the APK."
+            if ! gh release upload "$TAG" "$APK_PATH" --repo "$REPO" --clobber; then
+              echo "::error::Could not attach the APK: $TAG already exists and published releases are immutable."
+              echo "::error::An Apple job created the release first. Order it after this one — needs: [android]."
+              exit 1
+            fi
           else
-            gh release create "$TAG" \
-              --repo "${{ github.repository }}" \
+            # One call: create + attach. A published release cannot gain assets later.
+            gh release create "$TAG" "$APK_PATH" \
+              --repo "$REPO" \
               --title "$TAG" \
-              --notes "Android APK attached below (debug-signed, sideloadable)." \
+              --notes "Android APK attached below — debug-signed, so it sideloads directly." \
               --generate-notes \
-              --latest \
-              || echo "Release creation skipped (may have been created by a parallel job)."
+              --latest
           fi
-          gh release upload "$TAG" "$APK_PATH" --repo "${{ github.repository }}" --clobber
+          echo "APK attached to $TAG"
 
       - name: Restore export_presets.cfg
         if: always()
