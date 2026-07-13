@@ -49,10 +49,21 @@ on:
         type: string
         default: "scenes/**/*.tscn"
 
+      shell:
+        description: >-
+          Shell for every run step. Leave as 'bash' on macOS/Linux. On the
+          self-hosted Windows box you MUST pass the absolute Git Bash path:
+          'shell: bash' resolves there to WSL's system32 bash (no distro
+          installed) and every step dies. See docs/windows-runners.md.
+        type: string
+        default: bash
 jobs:
   test:
     name: GDScript tests & lint
     runs-on: ${{ fromJSON(inputs.runner) }}
+    defaults:
+      run:
+        shell: ${{ inputs.shell }}
     timeout-minutes: 20
     env:
       GODOT_VERSION: ${{ inputs.godot_version }}
@@ -100,6 +111,9 @@ jobs:
     name: Screenshots
     needs: test
     runs-on: ${{ fromJSON(inputs.runner) }}
+    defaults:
+      run:
+        shell: ${{ inputs.shell }}
     timeout-minutes: 15
     # Screenshots only make sense on PRs from the same repo (fork PRs get a
     # read-only token and can't push to the orphan branch).
