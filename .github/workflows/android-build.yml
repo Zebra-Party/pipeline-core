@@ -58,10 +58,21 @@ on:
         type: boolean
         default: false
 
+      shell:
+        description: >-
+          Shell for every run step. Leave as 'bash' on macOS/Linux. On the
+          self-hosted Windows box you MUST pass the absolute Git Bash path:
+          'shell: bash' resolves there to WSL's system32 bash (no distro
+          installed) and every step dies. See docs/windows-runners.md.
+        type: string
+        default: bash
 jobs:
   android:
     name: Android build
     runs-on: ${{ fromJSON(inputs.runner) }}
+    defaults:
+      run:
+        shell: ${{ inputs.shell }}
     timeout-minutes: 45
     env:
       GODOT_VERSION: ${{ inputs.godot_version }}

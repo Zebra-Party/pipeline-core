@@ -7,14 +7,33 @@ Unreal builds, etc.).
 
 ## Targeting a Windows runner
 
+You must pass **both** `runner` and `shell`. Passing `runner` alone will fail every step.
+
 ```yaml
 jobs:
   android:
     uses: Zebra-Party/pipeline-core/.github/workflows/android-build.yml@v1
     with:
       runner: '["self-hosted", "Windows", "X64"]'
+      shell: 'C:\Users\Developer\AppData\Local\Programs\Git\bin\bash.exe --noprofile --norc -eo pipefail {0}'
     secrets: inherit
 ```
+
+### Why `shell` is not optional
+
+The scripts are bash. On the Windows host, GitHub's `shell: bash` resolves to
+**WSL's `C:\Windows\System32\bash.exe`** — which has no distro installed — and every
+step dies. Git for Windows is a per-user install, so its `bash.exe` is not on the
+machine PATH. Point at it explicitly.
+
+Two more things that bite in bash on Windows, both already handled in the scripts but
+worth knowing when you write a new step:
+
+- **Drive letters look like remote hosts to `tar`.** `tar -xf "$RUNNER_TEMP/x.tar.xz"`
+  fails with `tar: Cannot connect to D: resolve failed`. Stage archives at a *relative*
+  path instead.
+- **`shasum` is not on PATH** (`--noprofile --norc` skips `/usr/bin/core_perl`). Use
+  `sha256sum`, or pick whichever exists if the step must also run on macOS.
 
 A runner is selected when it carries **all** the requested labels, so
 `["self-hosted", "Windows", "X64"]` matches any Windows runner in the pool — extra labels it
