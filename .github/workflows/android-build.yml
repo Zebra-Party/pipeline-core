@@ -210,7 +210,11 @@ jobs:
           name: android-apk
           path: build/android/*.apk
           if-no-files-found: warn
-          retention-days: 14
+          # Short: on a release build the APK is also attached to the GitHub Release
+          # (permanent), so this artifact only needs to cover the PR smoke-test window.
+          # At 14 days, ~30 MB APKs from four Godot repos accumulated to ~0.5 GB — right
+          # at the free Actions-storage cap. 2 days keeps it well clear.
+          retention-days: 2
 
       - name: Attach APK to GitHub Release
         # The workflow artifact above expires after 14 days and needs a GitHub login
