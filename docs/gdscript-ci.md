@@ -10,7 +10,7 @@ Runs GDScript lint, asset reimport, scene boot checks, headless tests, and (on P
 
 | Input | Type | Default | Description |
 |---|---|---|---|
-| `godot_version` | string | `4.6.2-stable` | Godot release to download and use. Must match the version used to author the project. |
+| `godot_version` | string | `4.7.2-stable` | Godot release to download and use. Must match the version used to author the project. |
 | `runner` | string | `["self-hosted","macOS","ephemeral"]` | JSON array of runner labels. Defaults to the org's ephemeral macOS pool. Override to route the job to another pool — see [windows-runners.md](windows-runners.md). |
 | `lint_dirs` | string | `scripts tools test` | Space-separated directories passed to `gdformat` and `gdlint`. Set to the root of your GDScript sources (e.g. `src` or `scripts tools test`). |
 | `scene_dir` | string | `scenes` | Root directory searched recursively for `.tscn` files to boot. |
@@ -81,7 +81,7 @@ jobs:
       contents: write
       pull-requests: write
     with:
-      godot_version: "4.6.2-stable"
+      godot_version: "4.7.2-stable"
       lint_dirs: "src"
       scene_dir: "scenes"
       test_pattern: "test/_test_*.gd"
@@ -99,7 +99,7 @@ jobs:
       contents: write
       pull-requests: write
     with:
-      godot_version: "4.6.2-stable"
+      godot_version: "4.7.2-stable"
     secrets: inherit
 ```
 

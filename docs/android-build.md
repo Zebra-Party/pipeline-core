@@ -8,7 +8,7 @@ Builds a **debug-signed** APK and uploads it as a workflow artifact. Optionally 
 
 | Input | Type | Default | Description |
 |---|---|---|---|
-| `godot_version` | string | `4.6.2-stable` | Godot release to use. |
+| `godot_version` | string | `4.7.2-stable` | Godot release to use. |
 | `runner` | string | `["self-hosted","macOS","ephemeral"]` | JSON array of runner labels (consumed via `fromJSON`). Android builds don't need macOS/Xcode, so this job can also run on the org's self-hosted **Windows** runners — pass `["self-hosted","Windows","X64"]` (the host needs an Android SDK/JDK; Godot is handled by `install_godot.sh`). See [windows-runners.md](windows-runners.md). |
 | `app_name` | string | `export` | Base filename for the output `.apk` (no extension). |
 | `android_preset` | string | `Android` | Name of the Godot export preset to use. Must match exactly what's in `export_presets.cfg`. |
@@ -58,7 +58,7 @@ jobs:
   android:
     uses: Zebra-Party/pipeline-core/.github/workflows/android-build.yml@v1
     with:
-      godot_version: "4.6.2-stable"
+      godot_version: "4.7.2-stable"
       app_name: "MyGame"
     secrets: inherit
 ```
@@ -89,7 +89,7 @@ jobs:
     if: needs.gate.outputs.release == 'true'
     uses: Zebra-Party/pipeline-core/.github/workflows/android-build.yml@v1
     with:
-      godot_version: "4.6.2-stable"
+      godot_version: "4.7.2-stable"
       app_name: "MyGame"
       version: ${{ needs.gate.outputs.version }}
       build: ${{ needs.gate.outputs.build }}
@@ -106,7 +106,7 @@ jobs:
   android:
     uses: Zebra-Party/pipeline-core/.github/workflows/android-build.yml@v1
     with:
-      godot_version: "4.6.2-stable"
+      godot_version: "4.7.2-stable"
       app_name: "MyGame"
       android_preset: "Android Release"
       pre_export_script: "tools/compile_scenes.sh"
