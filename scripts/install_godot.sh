@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installs Godot + matching export templates into a per-runner cache so
-# subsequent runs are fast. Honours $GODOT_VERSION (defaults to 4.6.2-stable).
+# subsequent runs are fast. Honours $GODOT_VERSION (defaults to 4.7.2-stable).
 #
 # Exposes:
 #   $GODOT       — full path to the headless-capable Godot binary
@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-GODOT_VERSION="${1:-${GODOT_VERSION:-4.6.2-stable}}"
+GODOT_VERSION="${1:-${GODOT_VERSION:-4.7.2-stable}}"
 GODOT_HOME="${GODOT_HOME:-${RUNNER_TOOL_CACHE:-$HOME/.cache}/godot}"
 mkdir -p "$GODOT_HOME"
 

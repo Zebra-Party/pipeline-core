@@ -57,7 +57,7 @@ jobs:
       contents: write      # needed to push screenshots to ci-screenshots branch
       pull-requests: write # needed to post the screenshot PR comment
     with:
-      godot_version: "4.6.2-stable"
+      godot_version: "4.7.2-stable"
       lint_dirs: "scripts tools test"
       scene_dir: "scenes"
       test_pattern: "test/_test_*.gd"
@@ -97,7 +97,7 @@ jobs:
     if: needs.gate.outputs.release == 'true'
     uses: Zebra-Party/pipeline-core/.github/workflows/ios-release.yml@v1
     with:
-      godot_version: "4.6.2-stable"
+      godot_version: "4.7.2-stable"
       app_name: "MyGame"
       upload_to_testflight: true
       version: ${{ needs.gate.outputs.version }}
@@ -109,7 +109,7 @@ jobs:
     if: needs.gate.outputs.release == 'true'
     uses: Zebra-Party/pipeline-core/.github/workflows/android-build.yml@v1
     with:
-      godot_version: "4.6.2-stable"
+      godot_version: "4.7.2-stable"
       app_name: "MyGame"
       version: ${{ needs.gate.outputs.version }}
       build: ${{ needs.gate.outputs.build }}

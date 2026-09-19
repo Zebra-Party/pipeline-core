@@ -8,7 +8,7 @@ Builds a signed `.app` and `.pkg` via Godot's macOS exporter and uploads to Test
 
 | Input | Type | Default | Description |
 |---|---|---|---|
-| `godot_version` | string | `4.6.2-stable` | Godot release to use. |
+| `godot_version` | string | `4.7.2-stable` | Godot release to use. |
 | `runner` | string | `["self-hosted","macOS","ephemeral"]` | JSON array of runner labels. Must be macOS. |
 | `app_name` | string | `export` | Base filename for the `.app` and `.pkg` (no extension). |
 | `macos_preset` | string | `macOS (Universal)` | Name of the Godot export preset to use. Must match exactly what's in `export_presets.cfg`. |
@@ -90,7 +90,7 @@ jobs:
     if: needs.gate.outputs.release == 'true'
     uses: Zebra-Party/pipeline-core/.github/workflows/macos-release.yml@v1
     with:
-      godot_version: "4.6.2-stable"
+      godot_version: "4.7.2-stable"
       app_name: "MyGame"
       macos_preset: "macOS (Universal)"
       upload_to_testflight: true

@@ -8,7 +8,7 @@ Builds a signed IPA via Godot's iOS exporter and uploads it to TestFlight. Signi
 
 | Input | Type | Default | Description |
 |---|---|---|---|
-| `godot_version` | string | `4.6.2-stable` | Godot release to use. |
+| `godot_version` | string | `4.7.2-stable` | Godot release to use. |
 | `runner` | string | `["self-hosted","macOS","ephemeral"]` | JSON array of runner labels. Must be a macOS runner — Xcode is required. |
 | `app_name` | string | `export` | Base filename for the produced `.ipa` (no extension). |
 | `upload_to_testflight` | boolean | `true` | Whether to upload the IPA to TestFlight. Upload only happens on `main` or a `v*` tag push, and never on a pull request — this flag lets you disable it entirely (e.g. for a staging project). |
@@ -89,7 +89,7 @@ jobs:
     if: needs.gate.outputs.release == 'true'
     uses: Zebra-Party/pipeline-core/.github/workflows/ios-release.yml@v1
     with:
-      godot_version: "4.6.2-stable"
+      godot_version: "4.7.2-stable"
       app_name: "MyGame"
       upload_to_testflight: true
       version: ${{ needs.gate.outputs.version }}
@@ -107,7 +107,7 @@ jobs:
     if: github.actor != 'dependabot[bot]'
     uses: Zebra-Party/pipeline-core/.github/workflows/ios-release.yml@v1
     with:
-      godot_version: "4.6.2-stable"
+      godot_version: "4.7.2-stable"
       app_name: "MyGame"
       pre_export_script: "tools/compile_scenes.sh"
       upload_to_testflight: true
