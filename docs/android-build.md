@@ -37,7 +37,7 @@ Don't "fix" this to `--export-release` without adding keystore secrets first —
 |---|---|---|
 | Install Godot | `install_godot.sh` | Downloads Godot + export templates. On Linux the binary is the standard `x86_64` build (not a separate headless binary — Godot 4.6 uses the same binary for all modes). |
 | Setup Java | `actions/setup-java@v5` | Installs Temurin JDK 17, which Godot's Android exporter requires to invoke Gradle. |
-| Setup Android SDK | `android-actions/setup-android@v3` | Installs the Android SDK command-line tools and sets `$ANDROID_SDK_ROOT`. |
+| Setup Android SDK | `android-actions/setup-android@v4` | Installs the Android SDK command-line tools and sets `$ANDROID_SDK_ROOT`. |
 | Configure SDK paths | _(inline)_ | Writes `export/android/android_sdk_path` and `export/android/java_sdk_path` into Godot's editor settings file so the exporter can find the SDK without an interactive editor session. |
 | Resolve version | `compute_version.sh` | Uses the `version` / `build` inputs when the release gate passed them; otherwise derives them from git tags. See [versioning.md](versioning.md). |
 | Apply version | `set_version.sh` | Writes `version/name` (string) and `version/code` (integer) into `export_presets.cfg`. |
