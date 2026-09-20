@@ -96,8 +96,17 @@ jobs:
           java-version: "17"
           distribution: temurin
 
+      # v4, not v3: Google stopped serving the obsolete `tools` package, which
+      # v3 still asks for by default, so sdkmanager exits 1 with "Failed to find
+      # package 'tools'" (first seen 2026-09-20 — the Android job hadn't run
+      # since 2026-07-14, so it rotted unnoticed while the gate skipped it).
+      # v4 defaults to `platform-tools`; pinned explicitly so a future default
+      # change can't surprise us. v4 also runs on Node 24, clearing the Node 20
+      # deprecation warning.
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
 
       - name: Install Godot
         run: bash .pipeline-core/scripts/install_godot.sh "$GODOT_VERSION"
