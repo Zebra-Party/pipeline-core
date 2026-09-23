@@ -126,10 +126,25 @@ jobs:
           fi
           pod --version
 
+      # A consumer whose iOS project is declared in `ios/project.yml`
+      # (XcodeGen) gets it generated from that file. `flutter create`
+      # below then leaves the existing project alone, so a repo that
+      # declares its project keeps whatever targets it declares — a
+      # share extension, a widget — instead of shipping whatever the
+      # Flutter template happens to produce.
+      #
+      # Repos with no `ios/project.yml` are untouched by this step.
+      - name: Generate Xcode project from project.yml
+        run: bash .pipeline-core/scripts/regenerate_xcodeproj.sh ios
+
       - name: Materialise platform folders
         # `ios/` is gitignored and regenerated here so it can never drift
         # behind the Flutter SDK. Mirrors what the project's CI workflow
         # does — keep them in sync if you change one.
+        #
+        # `flutter create` fills in what is missing and leaves existing
+        # files alone, so it is safe to run after the XcodeGen step
+        # above: a generated project survives it.
         #
         # Inputs are passed via env, not interpolated into the run block,
         # so a malicious value couldn't break out of the shell quoting.

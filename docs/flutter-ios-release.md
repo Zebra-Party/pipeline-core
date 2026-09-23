@@ -25,6 +25,18 @@ Builds a signed IPA from a Flutter project and uploads it to TestFlight. Mirrors
 
 The bundle ID Flutter generates from `--org X.Y --project-name a_b_c` is `X.Y.aBC` (camelCased). If your provisioning profile is for a different bundle ID, set `bundle_id` to override.
 
+### Declaring the Xcode project
+
+A Flutter repo that keeps an `ios/project.yml` (XcodeGen) gets its
+project generated from that file before `flutter create` runs. This is
+what lets such a repo carry targets the Flutter template doesn't
+produce — a share extension, a widget, a Live Activity — because a
+target that exists only in a regenerated project doesn't survive the
+regeneration.
+
+Nothing changes for a repo without `ios/project.yml`: the step reports
+that it found none and does nothing.
+
 ## Secrets
 
 Use `secrets: inherit` in the caller (the names below are org-level secrets that the rest of the org also consumes).
@@ -55,7 +67,8 @@ If any are missing the upload step is skipped with a warning; the IPA is still b
 |---|---|---|
 | Select Xcode | `select_xcode.sh` | Picks the newest `Xcode*.app` under `/Applications/`. |
 | Set up Flutter | `subosito/flutter-action` | Installs the requested Flutter SDK with caching. |
-| Materialise platform folders | `flutter create` | Regenerates `ios/` so it can never drift behind the SDK. |
+| Generate Xcode project from project.yml | `regenerate_xcodeproj.sh ios` | Generates `ios/Runner.xcodeproj` from `ios/project.yml` when the consumer has one. A no-op otherwise. |
+| Materialise platform folders | `flutter create` | Regenerates `ios/` so it can never drift behind the SDK. Fills in what is missing and leaves existing files alone, so a generated project survives it. |
 | `flutter pub get` | — | — |
 | Generate code | `build_runner` | Drift / Freezed / Riverpod codegen. Skipped if `run_build_runner: false`. |
 | Resolve version | `compute_version.sh` | Uses the `version` / `build` inputs when the release gate passed them; otherwise `X.Y.Z` from the latest `v*` tag + commit count, and a unix-timestamp build number. See [versioning.md](versioning.md). |

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Regenerates the Xcode project from project.yml using XcodeGen, if a
-# project.yml exists at the repo root. No-op for projects that don't
-# use XcodeGen.
+# project.yml exists in the given directory (default: the repo root;
+# a Flutter repo passes `ios`). No-op for projects that don't use
+# XcodeGen.
 #
 # Why this matters: consumer repos commit the generated .xcodeproj so
 # local clones don't need XcodeGen installed, but that pbxproj goes
@@ -15,10 +16,17 @@
 # `configure_xcode_signing.sh` and `build_xcode.sh`. Safe to run on
 # every job: idempotent against an already-up-to-date project.
 
+# A Flutter repo keeps its project.yml under ios/, because that is where
+# the Xcode project lives; a native repo keeps it at the root. Taking the
+# directory as an argument means one script serves both rather than two
+# scripts drifting apart.
 set -euo pipefail
 
+PROJECT_DIR="${1:-.}"
+cd "$PROJECT_DIR"
+
 if [ ! -f project.yml ]; then
-    echo "No project.yml at repo root — using committed .xcodeproj as-is"
+    echo "No project.yml in $PROJECT_DIR — using committed .xcodeproj as-is"
     exit 0
 fi
 
