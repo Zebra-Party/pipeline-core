@@ -15,6 +15,15 @@ Builds a signed IPA from a Flutter project and uploads it to TestFlight. Mirrors
 | `app_name` | string | _(required)_ | Output IPA basename. |
 | `flutter_project_name` | string | _(required)_ | Dart package name (snake_case). Passed to `flutter create --project-name`. |
 | `flutter_org` | string | _(required)_ | Reverse-DNS org prefix for the bundle ID. Passed to `flutter create --org`. |
+| `bundle_id` | string | _(empty)_ | Optional override of the iOS bundle ID. Set when the desired ID isn't `<flutter_org>.<lowerCamelCase(flutter_project_name)>`. Passes `PRODUCT_BUNDLE_IDENTIFIER` to xcodebuild. |
+| `flutter_version` | string | `3.41.x` | Flutter SDK version (`subosito/flutter-action` format). |
+| `runner` | string | `["self-hosted","macOS","ephemeral"]` | JSON array of runner labels. Must be macOS. |
+| `run_build_runner` | boolean | `true` | Run `dart run build_runner build --delete-conflicting-outputs` after `flutter pub get`. Set to `false` for projects without code generators (Drift, Freezed, json_serializable, etc.). |
+| `upload_to_testflight` | boolean | `true` | Upload to TestFlight when on `main` or a `v*` tag push. Build still runs on PRs. |
+| `version` | string | _(empty)_ | Version to build, from [`release-gate.yml`](versioning.md#release-gateyml). Empty → the workflow computes it itself (back-compat). Passing it from the gate means every platform job in a release shares one version and one build number. |
+| `build` | string | _(empty)_ | Build number, from the release gate. Empty → computed locally. |
+
+The bundle ID Flutter generates from `--org X.Y --project-name a_b_c` is `X.Y.aBC` (camelCased). If your provisioning profile is for a different bundle ID, set `bundle_id` to override.
 
 ### Declaring the Xcode project
 
@@ -27,15 +36,6 @@ regeneration.
 
 Nothing changes for a repo without `ios/project.yml`: the step reports
 that it found none and does nothing.
-| `bundle_id` | string | _(empty)_ | Optional override of the iOS bundle ID. Set when the desired ID isn't `<flutter_org>.<lowerCamelCase(flutter_project_name)>`. Passes `PRODUCT_BUNDLE_IDENTIFIER` to xcodebuild. |
-| `flutter_version` | string | `3.41.x` | Flutter SDK version (`subosito/flutter-action` format). |
-| `runner` | string | `["self-hosted","macOS","ephemeral"]` | JSON array of runner labels. Must be macOS. |
-| `run_build_runner` | boolean | `true` | Run `dart run build_runner build --delete-conflicting-outputs` after `flutter pub get`. Set to `false` for projects without code generators (Drift, Freezed, json_serializable, etc.). |
-| `upload_to_testflight` | boolean | `true` | Upload to TestFlight when on `main` or a `v*` tag push. Build still runs on PRs. |
-| `version` | string | _(empty)_ | Version to build, from [`release-gate.yml`](versioning.md#release-gateyml). Empty → the workflow computes it itself (back-compat). Passing it from the gate means every platform job in a release shares one version and one build number. |
-| `build` | string | _(empty)_ | Build number, from the release gate. Empty → computed locally. |
-
-The bundle ID Flutter generates from `--org X.Y --project-name a_b_c` is `X.Y.aBC` (camelCased). If your provisioning profile is for a different bundle ID, set `bundle_id` to override.
 
 ## Secrets
 
