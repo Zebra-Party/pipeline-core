@@ -15,6 +15,18 @@ Builds a signed IPA from a Flutter project and uploads it to TestFlight. Mirrors
 | `app_name` | string | _(required)_ | Output IPA basename. |
 | `flutter_project_name` | string | _(required)_ | Dart package name (snake_case). Passed to `flutter create --project-name`. |
 | `flutter_org` | string | _(required)_ | Reverse-DNS org prefix for the bundle ID. Passed to `flutter create --org`. |
+
+### Declaring the Xcode project
+
+A Flutter repo that keeps an `ios/project.yml` (XcodeGen) gets its
+project generated from that file before `flutter create` runs. This is
+what lets such a repo carry targets the Flutter template doesn't
+produce — a share extension, a widget, a Live Activity — because a
+target that exists only in a regenerated project doesn't survive the
+regeneration.
+
+Nothing changes for a repo without `ios/project.yml`: the step reports
+that it found none and does nothing.
 | `bundle_id` | string | _(empty)_ | Optional override of the iOS bundle ID. Set when the desired ID isn't `<flutter_org>.<lowerCamelCase(flutter_project_name)>`. Passes `PRODUCT_BUNDLE_IDENTIFIER` to xcodebuild. |
 | `flutter_version` | string | `3.41.x` | Flutter SDK version (`subosito/flutter-action` format). |
 | `runner` | string | `["self-hosted","macOS","ephemeral"]` | JSON array of runner labels. Must be macOS. |
@@ -55,7 +67,8 @@ If any are missing the upload step is skipped with a warning; the IPA is still b
 |---|---|---|
 | Select Xcode | `select_xcode.sh` | Picks the newest `Xcode*.app` under `/Applications/`. |
 | Set up Flutter | `subosito/flutter-action` | Installs the requested Flutter SDK with caching. |
-| Materialise platform folders | `flutter create` | Regenerates `ios/` so it can never drift behind the SDK. |
+| Generate Xcode project from project.yml | `regenerate_xcodeproj.sh ios` | Generates `ios/Runner.xcodeproj` from `ios/project.yml` when the consumer has one. A no-op otherwise. |
+| Materialise platform folders | `flutter create` | Regenerates `ios/` so it can never drift behind the SDK. Fills in what is missing and leaves existing files alone, so a generated project survives it. |
 | `flutter pub get` | — | — |
 | Generate code | `build_runner` | Drift / Freezed / Riverpod codegen. Skipped if `run_build_runner: false`. |
 | Resolve version | `compute_version.sh` | Uses the `version` / `build` inputs when the release gate passed them; otherwise `X.Y.Z` from the latest `v*` tag + commit count, and a unix-timestamp build number. See [versioning.md](versioning.md). |
