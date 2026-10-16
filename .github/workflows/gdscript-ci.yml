@@ -36,6 +36,14 @@ on:
         description: "Glob pattern for headless test scripts"
         type: string
         default: "test/_test_*.gd"
+      test_timeout_minutes:
+        description: "Total test job time allowance, including asset preparation"
+        type: number
+        default: 20
+      screenshot_timeout_minutes:
+        description: "Total screenshot job time allowance, including asset preparation"
+        type: number
+        default: 15
       pre_test_script:
         description: "Optional path to a project script to run before tests (e.g. tools/compile_scenes.sh)"
         type: string
@@ -64,7 +72,7 @@ jobs:
     defaults:
       run:
         shell: ${{ inputs.shell }}
-    timeout-minutes: 20
+    timeout-minutes: ${{ inputs.test_timeout_minutes }}
     env:
       GODOT_VERSION: ${{ inputs.godot_version }}
       LINT_DIRS: ${{ inputs.lint_dirs }}
@@ -114,7 +122,7 @@ jobs:
     defaults:
       run:
         shell: ${{ inputs.shell }}
-    timeout-minutes: 15
+    timeout-minutes: ${{ inputs.screenshot_timeout_minutes }}
     # Screenshots only make sense on PRs from the same repo (fork PRs get a
     # read-only token and can't push to the orphan branch).
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository

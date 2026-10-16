@@ -15,6 +15,8 @@ Runs GDScript lint, asset reimport, scene boot checks, headless tests, and (on P
 | `lint_dirs` | string | `scripts tools test` | Space-separated directories passed to `gdformat` and `gdlint`. Set to the root of your GDScript sources (e.g. `src` or `scripts tools test`). |
 | `scene_dir` | string | `scenes` | Root directory searched recursively for `.tscn` files to boot. |
 | `test_pattern` | string | `test/_test_*.gd` | Glob pattern for headless test scripts. Set to `""` if you have no tests yet — the step skips cleanly when nothing matches. |
+| `test_timeout_minutes` | number | `20` | Total test job allowance, including checkout, downloads and the pre-test script. Increase for large asset libraries on slower connections; all test steps still run. |
+| `screenshot_timeout_minutes` | number | `15` | Total screenshot job allowance, including its independent asset preparation. |
 | `pre_test_script` | string | _(empty)_ | Optional path to a shell script to run before linting and tests. Use this if your project has a code-generation step that must run first (e.g. `tools/compile_scenes.sh`). Also runs in the `screenshots` job, before capture. |
 | `strict_tests` | boolean | `false` | Fail a test that prints `SCRIPT ERROR` even if it exits 0, catching swallowed false passes. Off by default; opt in once a repo's tests are error-clean. |
 | `screenshot_scene_glob` | string | `scenes/**/*.tscn` | Space-separated glob(s) passed to `screenshot_scenes.sh` as `SCENE_GLOB`. `**` is supported (globstar). |
