@@ -42,15 +42,16 @@ while :; do
     set -e
     echo "::endgroup::"
 
-    if [ "$rc" -eq 0 ] && ! grep -q "UPLOAD FAILED" "$ALTOOL_LOG"; then
+    # Some Apple rejections print ERROR but still return zero.
+    if [ "$rc" -eq 0 ] && ! grep -qiE "UPLOAD FAILED|(^|[[:space:]])ERROR:" "$ALTOOL_LOG"; then
         echo "tvOS upload succeeded."
         exit 0
     fi
 
     # A validation rejection (asset/metadata) won't pass on retry — fail now.
-    if grep -qE "UPLOAD FAILED with [0-9]+ error" "$ALTOOL_LOG" \
+    if grep -qiE "UPLOAD FAILED|(^|[[:space:]])ERROR:" "$ALTOOL_LOG" \
        && ! grep -qiE "$RETRYABLE" "$ALTOOL_LOG"; then
-        echo "::error::altool reported a non-retryable UPLOAD FAILED — see log above"
+        echo "::error::altool reported a non-retryable upload error — see log above"
         exit 1
     fi
 

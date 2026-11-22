@@ -27,7 +27,7 @@ xcrun altool --upload-app \
 echo "::endgroup::"
 
 # altool can exit 0 even when upload fails; check output explicitly.
-if grep -q "UPLOAD FAILED" "$ALTOOL_LOG"; then
-    echo "::error::altool reported UPLOAD FAILED — see log above"
+if grep -qiE "UPLOAD FAILED|(^|[[:space:]])ERROR:" "$ALTOOL_LOG"; then
+    echo "::error::altool reported an upload error — see log above"
     exit 1
 fi
