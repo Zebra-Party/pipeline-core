@@ -26,3 +26,11 @@ jobs:
             | bash -s -- latest /usr/local/bin
       - name: Run actionlint on all workflows
         run: actionlint .github/workflows/*.yml
+
+  upload-tests:
+    name: Apple upload result tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test Apple upload success and failure handling
+        run: python3 -m unittest discover -s tests -v
